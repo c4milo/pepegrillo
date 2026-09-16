@@ -20,9 +20,12 @@
 //! and a file that does not parse is reported as a finding of the `parse` pseudo-rule. With no
 //! `--rule`, every rule runs; with one or more, only those.
 //!
-//! One line per finding, sorted by path, line, column and rule:
+//! One line per finding on standard output, sorted by path, line, column and rule, in the shape
+//! `report_line.zig` defines:
 //!
-//!     path:line: [rule-name] message
+//!     path:line:column: error: [rule-name] message
+//!
+//! A file the walk cannot read is reported on standard error as `path: error: [unreadable] reason`.
 //!
 //! Exit status: 0 when nothing was found, 1 when any finding was reported or a file failed to
 //! read, 2 on a usage error.
@@ -33,9 +36,13 @@ const Ast = std.zig.Ast;
 const Io = std.Io;
 const paths = @import("paths.zig");
 const report = @import("report.zig");
+const report_line = @import("../report_line.zig");
 
 /// The rule name a file that fails to parse is reported under.
 pub const parse_rule_name = "parse";
+
+/// The rule name a file the walk cannot read is reported under.
+pub const unreadable_rule_name = "unreadable";
 
 /// Longest path the walk builds.
 pub const max_path_bytes: usize = 4096;
@@ -51,6 +58,10 @@ const output_buffer_bytes: usize = 16 * 1024;
 
 /// Longest parse error message the tool renders.
 const max_parse_error_bytes: usize = 512;
+
+/// Longest line the tool prints about a file it cannot read: the path, and room for the rule name
+/// and the reason. A longer line is cut, never an error.
+const max_file_error_line_bytes: usize = max_path_bytes + 128;
 
 /// Directories the walk does not enter: build output and version control, never hand-written.
 const skipped_directories = [_][]const u8{ ".zig-cache", "zig-out", ".git" };
@@ -255,9 +266,18 @@ pub const Run = struct {
     fn file_error(self: *Run, path: []const u8, reason: []const u8) void {
         self.file_errors += 1;
         if (self.quiet) return;
-        std.debug.print("{s}: error: {s}\n", .{ path, reason });
+        var line_buffer: [max_file_error_line_bytes]u8 = undefined;
+        var line: Io.Writer = .fixed(&line_buffer);
+        write_file_error(&line, path, reason) catch {};
+        std.debug.print("{s}", .{line.buffered()});
     }
 };
+
+/// Writes the line for a file the walk cannot read: `path: error: [unreadable] reason`.
+pub fn write_file_error(out: *Io.Writer, path: []const u8, reason: []const u8) !void {
+    const location: report_line.Location = .{ .source = path };
+    try report_line.write(out, location, .@"error", unreadable_rule_name, "{s}", .{reason});
+}
 
 fn print_usage(comptime rules: anytype) void {
     std.debug.print("usage: lint [--rule NAME]... PATH...\nrules:", .{});

@@ -21,9 +21,10 @@
 //! (`git_log.zig`). `--message PATH` lints the one message in that file, the file a git hook is
 //! handed, with the `#` lines git's editor template writes dropped first.
 //!
-//! One line per finding, in the order the rules of `rules.zig` ran:
+//! One line per finding, in the order the rules of `rules.zig` ran, in the shape `report_line.zig`
+//! defines, with `error` for a violation and `warning` for a warning:
 //!
-//!     source: severity: rule-name: message
+//!     source: error: [rule-name] message
 //!
 //! Exit status: 0 when no rule was violated, warnings included; 1 when any rule was violated; 2 on
 //! a usage error, a message file that cannot be read, or a git log that failed. A pre-push hook
@@ -385,7 +386,7 @@ test "run writes every finding and returns the exit status, and caps the finding
     const status = try run(arena, testing.io, test_config, &given, &out, &errors);
     try testing.expectEqual(exit_violations, status);
     try testing.expectEqual(0, errors.buffered().len);
-    const description_lines = ": violation: subject-description: ";
+    const description_lines = ": error: [subject-description] ";
     try testing.expectEqual(2, std.mem.count(u8, out.buffered(), description_lines));
     const one_finding = comptime blk: {
         var project = test_config;

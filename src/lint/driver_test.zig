@@ -178,3 +178,13 @@ test "--rule limits the dispatch to the named rules" {
     try Linter.dispatch(&run, file);
     try testing.expectEqual(1, run.context.findings.count());
 }
+
+test "a file the walk cannot read prints as path: error: [unreadable] reason" {
+    var buffer: [128]u8 = undefined;
+    var out: Io.Writer = .fixed(&buffer);
+    try driver.write_file_error(&out, "src/store/page.zig", "FileNotFound");
+    try testing.expectEqualStrings(
+        "src/store/page.zig: error: [unreadable] FileNotFound\n",
+        out.buffered(),
+    );
+}

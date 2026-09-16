@@ -1,15 +1,18 @@
 //! What one commit-lint run accumulates. Every rule calls `add`, `warn` or `record` once per
-//! finding, and `write` prints the findings in the order they were recorded, one line each:
+//! finding, and `write` prints the findings in the order they were recorded, one line each, in
+//! the shape `report_line.zig` defines:
 //!
-//!     source: severity: rule-name: message
+//!     source: error: [rule-name] message
 //!
-//! The source is the commit sha in `--range` mode and the file path in `--message` mode. The
-//! severity is `violation` for a rule that refuses the commit and `warning` for one that only
-//! reports on it. The exit status reads `count_violations`, so a run with warnings alone is clean.
+//! The source is the commit sha in `--range` mode and the file path in `--message` mode. A
+//! violation, which refuses the commit, prints as `error`, and a warning, which only reports on
+//! it, prints as `warning`. The exit status reads `count_violations`, so a run with warnings alone
+//! is clean.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const report_line = @import("../report_line.zig");
 
 /// Whether a finding refuses the commit or only reports on it.
 pub const Severity = enum {
@@ -20,6 +23,14 @@ pub const Severity = enum {
         return switch (self) {
             .violation => "violation",
             .warning => "warning",
+        };
+    }
+
+    /// The severity the report line prints: a violation fails the run, as an `error` does.
+    pub fn line_severity(self: Severity) report_line.Severity {
+        return switch (self) {
+            .violation => .@"error",
+            .warning => .warning,
         };
     }
 };
@@ -90,15 +101,12 @@ pub const Findings = struct {
         return total;
     }
 
-    /// Writes every finding as one `source: severity: rule: message` line.
+    /// Writes every finding as one `source: severity: [rule] message` line.
     pub fn write(self: *const Findings, out: *Io.Writer) !void {
         for (self.items.items) |finding| {
-            try out.print("{s}: {s}: {s}: {s}\n", .{
-                finding.source,
-                finding.severity.text(),
-                finding.rule,
-                finding.message,
-            });
+            const location: report_line.Location = .{ .source = finding.source };
+            const severity = finding.severity.line_severity();
+            try report_line.write(out, location, severity, finding.rule, "{s}", .{finding.message});
         }
     }
 };
@@ -120,8 +128,8 @@ test "write prints source, severity, rule and message in the order recorded" {
     var writer: Io.Writer = .fixed(&buffer);
     try findings.write(&writer);
     try testing.expectEqualStrings(
-        "abc1234: violation: subject-format: the type is wrong\n" ++
-            "abc1234: warning: scope-known: the scope is new\n",
+        "abc1234: error: [subject-format] the type is wrong\n" ++
+            "abc1234: warning: [scope-known] the scope is new\n",
         writer.buffered(),
     );
 }

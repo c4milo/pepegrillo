@@ -2,17 +2,16 @@
 //!
 //! A rule receives a `Context` and a `File` and calls `context.findings.add` once per finding.
 //! `driver.zig` sorts the findings by path, line, column and rule name, so the report reads the
-//! same whatever order the directory walk visited the files in, and prints one line per finding:
+//! same whatever order the directory walk visited the files in, and prints one line per finding in
+//! the shape `report_line.zig` defines:
 //!
-//!     path:line: [rule-name] message
-//!
-//! The column is recorded and not printed. It orders two findings that fall on one line, so the
-//! report is stable when a rule reports twice about the same line.
+//!     path:line:column: error: [rule-name] message
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Ast = std.zig.Ast;
+const report_line = @import("../report_line.zig");
 
 /// Findings recorded per run. One more is reported as an error, never dropped silently.
 pub const max_findings: usize = 1024 * 1024;
@@ -24,7 +23,7 @@ pub const Finding = struct {
     path: []const u8,
     /// 1-based line.
     line: usize,
-    /// 1-based column. Orders findings that share a line; never printed.
+    /// 1-based column.
     column: usize,
     rule: []const u8,
     message: []const u8,
@@ -71,12 +70,15 @@ pub const Findings = struct {
         std.mem.sort(Finding, self.items.items, {}, before);
     }
 
-    /// Writes every finding as one `path:line: [rule] message` line.
+    /// Writes every finding as one `path:line:column: error: [rule] message` line.
     pub fn write(self: *const Findings, out: *Io.Writer) !void {
         for (self.items.items) |finding| {
-            try out.print("{s}:{d}: [{s}] {s}\n", .{
-                finding.path, finding.line, finding.rule, finding.message,
-            });
+            const location: report_line.Location = .{
+                .source = finding.path,
+                .position = .{ .line = finding.line, .column = finding.column },
+            };
+            const message = finding.message;
+            try report_line.write(out, location, .@"error", finding.rule, "{s}", .{message});
         }
     }
 };
@@ -139,7 +141,7 @@ test "findings sort by path, then line, then column, then rule" {
     try testing.expectEqualStrings("b.zig", items[4].path);
 }
 
-test "write prints path:line: [rule] message" {
+test "write prints path:line:column: error: [rule] message" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -149,7 +151,7 @@ test "write prints path:line: [rule] message" {
     defer writer.deinit();
     try findings.write(&writer.writer);
     try testing.expectEqualStrings(
-        "src/core/core.zig:3: [heap] reference to std.heap\n",
+        "src/core/core.zig:3:7: error: [heap] reference to std.heap\n",
         writer.written(),
     );
 }

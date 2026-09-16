@@ -11,14 +11,15 @@
 //! Each PATH is a file, or a directory walked recursively for `.zig` files with `.zig-cache`,
 //! `zig-out` and `.git` skipped. The tool parses each file with `std.zig.Ast`, scores every
 //! function and every `test` block, and prints one line per declaration over the threshold,
-//! sorted by path and then line:
+//! sorted by path and then line, in the shape `report_line.zig` defines:
 //!
-//!     path:line: name scored SCORE (max N)
+//!     path:line:column: error: [cognitive-complexity] name scored SCORE (max N)
 //!
-//! `--list` prints that line for every declaration instead, highest score first. Each file that
-//! could not be read or scored follows as `path: not scored (reason)`, and one summary line ends
-//! the report. The threshold is `default_max_score`, 15, unless `--max` names another; a score
-//! equal to the threshold passes.
+//! `--list` prints a line for every declaration instead, highest score first, with `note` in
+//! place of `error` for a declaration at or under the threshold. Each file that could not be read
+//! or scored follows as `path: error: [not-scored] reason`, and one summary line ends the report.
+//! The threshold is `default_max_score`, 15, unless `--max` names another; a score equal to the
+//! threshold passes.
 //!
 //! Exit status: 0 when nothing is over the threshold and every file was scored, 1 when something
 //! is over or a file was not scored, 2 on a malformed command line or a PATH that cannot be read.

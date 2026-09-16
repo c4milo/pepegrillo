@@ -65,7 +65,7 @@ test "a declaration over the threshold is named and the status is 1" {
     }, .{ .max_score = 3 });
     try testing.expectEqual(report.exit_findings, status);
     try testing.expectEqualStrings(
-        \\src/store/page.zig:12: parse scored 9 (max 3)
+        \\src/store/page.zig:12:4: error: [cognitive-complexity] parse scored 9 (max 3)
         \\cognitive-complexity: 1 of 2 functions over the limit, 0 files not scored
         \\
     , text);
@@ -81,9 +81,9 @@ test "every violation is reported, sorted by path and then line" {
     }, .{});
     try testing.expectEqual(report.exit_findings, status);
     try testing.expectEqualStrings(
-        \\src/store/a.zig:7: first scored 17 (max 15)
-        \\src/store/a.zig:9: second scored 16 (max 15)
-        \\src/store/b.zig:3: third scored 20 (max 15)
+        \\src/store/a.zig:7:1: error: [cognitive-complexity] first scored 17 (max 15)
+        \\src/store/a.zig:9:1: error: [cognitive-complexity] second scored 16 (max 15)
+        \\src/store/b.zig:3:1: error: [cognitive-complexity] third scored 20 (max 15)
         \\cognitive-complexity: 3 of 3 functions over the limit, 0 files not scored
         \\
     , text);
@@ -110,12 +110,14 @@ test "over the boundary fixture 16 fails at the default threshold and passes at 
     const scores = try scorer.score_source(arena, "src/store/page.zig", boundary_source);
     const text, const failing = try run_report(arena, scores, .{});
     try testing.expectEqual(report.exit_findings, failing);
-    try testing.expect(std.mem.startsWith(u8, text, "src/store/page.zig:17: sixteen scored 16"));
+    try testing.expect(std.mem.startsWith(u8, text, "src/store/page.zig:17:"));
+    const line = ": error: [cognitive-complexity] sixteen scored 16 (max 15)\n";
+    try testing.expect(std.mem.indexOf(u8, text, line) != null);
     _, const passing = try run_report(arena, scores, .{ .max_score = 16 });
     try testing.expectEqual(report.exit_clean, passing);
 }
 
-test "--list prints every declaration highest first, then by path and line" {
+test "--list prints every declaration highest first, and notes the ones under the threshold" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const text, const status = try run_report(arena_state.allocator(), &.{
@@ -123,15 +125,14 @@ test "--list prints every declaration highest first, then by path and line" {
         .{ .path = "src/store/a.zig", .line = 5, .column = 1, .name = "low", .score = 0 },
         .{ .path = "src/store/a.zig", .line = 8, .column = 1, .name = "tied_first", .score = 3 },
         .{ .path = "src/store/b.zig", .line = 1, .column = 1, .name = "high", .score = 7 },
-    }, .{ .max_score = 15, .list = true });
-    // Nothing is over the threshold, so listing changes the lines printed and not the status.
-    try testing.expectEqual(report.exit_clean, status);
+    }, .{ .max_score = 5, .list = true });
+    try testing.expectEqual(report.exit_findings, status);
     try testing.expectEqualStrings(
-        \\src/store/b.zig:1: high scored 7 (max 15)
-        \\src/store/a.zig:8: tied_first scored 3 (max 15)
-        \\src/store/b.zig:2: tied_later scored 3 (max 15)
-        \\src/store/a.zig:5: low scored 0 (max 15)
-        \\cognitive-complexity: 4 functions scored, highest 7 (max 15)
+        \\src/store/b.zig:1:1: error: [cognitive-complexity] high scored 7 (max 5)
+        \\src/store/a.zig:8:1: note: [cognitive-complexity] tied_first scored 3 (max 5)
+        \\src/store/b.zig:2:1: note: [cognitive-complexity] tied_later scored 3 (max 5)
+        \\src/store/a.zig:5:1: note: [cognitive-complexity] low scored 0 (max 5)
+        \\cognitive-complexity: 1 of 4 functions over the limit, 0 files not scored
         \\
     , text);
 }
@@ -154,8 +155,8 @@ test "files not scored follow the scores, sorted by path, and fail the run" {
     const status = try print_report(&writer.writer, &run, .{});
     try testing.expectEqual(report.exit_findings, status);
     try testing.expectEqualStrings(
-        \\src/store/m.zig: not scored (NestingTooDeep)
-        \\src/store/z.zig: not scored (ParseFailed)
+        \\src/store/m.zig: error: [not-scored] NestingTooDeep
+        \\src/store/z.zig: error: [not-scored] ParseFailed
         \\cognitive-complexity: 0 of 1 functions over the limit, 2 files not scored
         \\
     , writer.written());

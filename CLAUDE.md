@@ -25,7 +25,9 @@ keeps reproducing them across pepegrillo versions.
   finding, a lost finding, a changed score, a changed exit status. Mark the commit subject with
   `!` and say which configurations it changes.
 - A new check arrives switched off, so adopting it is the project's commit and not pepegrillo's.
-- The report format is part of the interface too: `path:line: [rule] message` for lint findings.
+- The report format is part of the interface too. Every tool prints a finding the way the Zig
+  compiler prints an error, `path:line:column: error: [rule] message`, and leaves out the line and
+  the column when a finding has none. `src/report_line.zig` writes it.
 
 ## Conventions
 
@@ -67,7 +69,8 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 
 ## Layout
 
-- `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`.
+- `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`, and
+  `report_line`, the finding line all three print.
 - `src/lint/` is the engine: `driver.zig`, `report.zig`, `scope.zig`, `paths.zig`, `text.zig`,
   `ast.zig`, `ast_read.zig`, `harness.zig`. `src/lint/rules/` holds the generic rules.
 - `src/complexity/` is the cognitive-complexity scorer and its report.

@@ -5,9 +5,11 @@
 pub const lint = @import("lint/lint.zig");
 pub const complexity = @import("complexity/complexity.zig");
 pub const commit = @import("commit/commit.zig");
+pub const report_line = @import("report_line.zig");
 
 test {
     _ = lint;
     _ = complexity;
     _ = commit;
+    _ = report_line;
 }

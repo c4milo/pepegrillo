@@ -5,8 +5,15 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const paths = @import("../lint/paths.zig");
+const report_line = @import("../report_line.zig");
 const scorer = @import("complexity_scorer.zig");
 const FunctionScore = scorer.FunctionScore;
+
+/// The rule name a score is reported under.
+pub const score_rule_name = "cognitive-complexity";
+
+/// The rule name a file that could not be scored is reported under.
+pub const unscored_rule_name = "not-scored";
 
 /// Threshold applied when `--max` is absent: a score of 15 passes and 16 fails.
 pub const default_max_score: u32 = 15;
@@ -181,7 +188,8 @@ fn unscored_before(_: void, left: Unscored, right: Unscored) bool {
 }
 
 /// Prints one line per declaration over the threshold, or per declaration with `list`, then one
-/// line per file not scored, then the summary line. Returns the exit status.
+/// line per file not scored, then the summary line. A declaration over the threshold is an
+/// `error`, and one at or under it, printed only with `list`, is a `note`. Returns the exit status.
 pub fn print_report(out: *Io.Writer, report: *Report, options: Options) !u8 {
     const scores = report.scores.items;
     if (options.list) {
@@ -196,13 +204,22 @@ pub fn print_report(out: *Io.Writer, report: *Report, options: Options) !u8 {
         const over = scored.score > options.max_score;
         if (over) violations += 1;
         if (!over and !options.list) continue;
-        try out.print("{s}:{d}: {s} scored {d} (max {d})\n", .{
-            scored.path, scored.line, scored.name, scored.score, options.max_score,
+        const location: report_line.Location = .{
+            .source = scored.path,
+            .position = .{ .line = scored.line, .column = scored.column },
+        };
+        const severity: report_line.Severity = if (over) .@"error" else .note;
+        const message = "{s} scored {d} (max {d})";
+        try report_line.write(out, location, severity, score_rule_name, message, .{
+            scored.name, scored.score, options.max_score,
         });
     }
     const unscored = report.unscored.items;
     std.mem.sort(Unscored, unscored, {}, unscored_before);
-    for (unscored) |file| try out.print("{s}: not scored ({s})\n", .{ file.path, file.reason });
+    for (unscored) |file| {
+        const location: report_line.Location = .{ .source = file.path };
+        try report_line.write(out, location, .@"error", unscored_rule_name, "{s}", .{file.reason});
+    }
     return print_summary(out, .{
         .scored = scores.len,
         .highest = highest,
