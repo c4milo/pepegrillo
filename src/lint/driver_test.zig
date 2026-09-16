@@ -188,3 +188,28 @@ test "a file the walk cannot read prints as path: error: [unreadable] reason" {
         out.buffered(),
     );
 }
+
+test "an absolute or ./ PATH under the working directory reaches the rules relative to it" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(testing.io, "src/store");
+    const source = "const a = 1;\n";
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "src/store/page.zig", .data = source });
+
+    var run = new_run(arena);
+    run.working_directory = paths.canonical_working_directory(arena, testing.io);
+    try testing.expect(run.working_directory.len != 0);
+    const relative = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    const absolute = try std.fmt.allocPrint(arena, "{s}/{s}", .{ run.working_directory, relative });
+    const dotted = try std.fmt.allocPrint(arena, "./{s}/src/store/page.zig", .{relative});
+    try Linter.lint_path(&run, absolute);
+    try Linter.lint_path(&run, dotted);
+
+    const expected = try std.fmt.allocPrint(arena, "{s}/src/store/page.zig", .{relative});
+    const findings = run.context.findings.items.items;
+    try testing.expectEqual(2, findings.len);
+    for (findings) |finding| try testing.expectEqualStrings(expected, finding.path);
+}

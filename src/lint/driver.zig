@@ -16,9 +16,11 @@
 //! Run:  lint [--rule NAME]... PATH...
 //!
 //! Every PATH is a file, or a directory walked recursively with the `skipped_directories` left
-//! out. Every regular file found is handed to every enabled rule. A `.zig` file is parsed once,
-//! and a file that does not parse is reported as a finding of the `parse` pseudo-rule. With no
-//! `--rule`, every rule runs; with one or more, only those.
+//! out. A PATH under the working directory is read relative to it, so `zig build`'s absolute and
+//! `./` paths reach the rules as `src/...` (`paths.resolve_argument`). Every regular file found is
+//! handed to every enabled rule. A `.zig` file is parsed once, and a file that does not parse is
+//! reported as a finding of the `parse` pseudo-rule. With no `--rule`, every rule runs; with one
+//! or more, only those.
 //!
 //! One line per finding on standard output, sorted by path, line, column and rule, in the shape
 //! `report_line.zig` defines:
@@ -173,9 +175,14 @@ pub const Run = struct {
     file_errors: usize = 0,
     /// Set by the tests so a passing run writes nothing. `main` leaves it false.
     quiet: bool = false,
+    /// The canonical working directory every PATH is made relative to. Empty leaves an absolute
+    /// PATH absolute.
+    working_directory: []const u8 = "",
 
-    pub fn lint_path(self: *Run, comptime rules: anytype, path: []const u8) !void {
+    pub fn lint_path(self: *Run, comptime rules: anytype, argument: []const u8) !void {
         const io = self.context.io;
+        const arena = self.context.arena;
+        const path = paths.resolve_argument(arena, io, self.working_directory, argument);
         const stat = Io.Dir.cwd().statFile(io, path, .{}) catch |failure| {
             return self.file_error(path, @errorName(failure));
         };
@@ -299,6 +306,7 @@ fn run_main(comptime rules: anytype, init: std.process.Init) !void {
     var run: Run = .{
         .context = .{ .arena = arena, .io = init.io, .findings = .{ .arena = arena } },
         .enabled = options.enabled,
+        .working_directory = paths.canonical_working_directory(arena, init.io),
     };
     for (options.paths) |path| try run.lint_path(rules, path);
     run.context.findings.sort();

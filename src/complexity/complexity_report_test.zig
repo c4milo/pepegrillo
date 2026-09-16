@@ -256,3 +256,21 @@ test "a file past max_files_per_run ends the run with an error" {
     try testing.expectEqual(1, run.scores.items.len);
     try testing.expectError(error.TooManyFiles, run.lint_path(path));
 }
+
+test "an absolute PATH under the working directory is scored under its relative path" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "page.zig", .data = "fn f() void {}\n" });
+
+    var run: Report = .{ .arena = arena, .io = testing.io };
+    run.working_directory = report.paths.canonical_working_directory(arena, testing.io);
+    const relative = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    const absolute = try std.fmt.allocPrint(arena, "{s}/{s}", .{ run.working_directory, relative });
+    try run.lint_path(absolute);
+    try testing.expectEqual(1, run.scores.items.len);
+    const expected = try std.fmt.allocPrint(arena, "{s}/page.zig", .{relative});
+    try testing.expectEqualStrings(expected, run.scores.items[0].path);
+}

@@ -4,7 +4,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const paths = @import("../lint/paths.zig");
+pub const paths = @import("../lint/paths.zig");
 const report_line = @import("../report_line.zig");
 const scorer = @import("complexity_scorer.zig");
 const FunctionScore = scorer.FunctionScore;
@@ -96,10 +96,15 @@ pub const Report = struct {
     scores: std.ArrayList(FunctionScore) = .empty,
     unscored: std.ArrayList(Unscored) = .empty,
     files_seen: usize = 0,
+    /// The canonical working directory every PATH is made relative to, so a score reads
+    /// `src/...` whether `zig build` passed an absolute or a `./` path. Empty leaves an absolute
+    /// PATH absolute.
+    working_directory: []const u8 = "",
 
     /// Scores one PATH: a file, or a directory walked recursively. A PATH that cannot be opened
     /// returns its error, which `main` reports as a usage error.
-    pub fn lint_path(self: *Report, path: []const u8) !void {
+    pub fn lint_path(self: *Report, argument: []const u8) !void {
+        const path = paths.resolve_argument(self.arena, self.io, self.working_directory, argument);
         const stat = try Io.Dir.cwd().statFile(self.io, path, .{});
         if (stat.kind != .directory) return self.lint_file(path);
         var dir = try Io.Dir.cwd().openDir(self.io, path, .{ .iterate = true });

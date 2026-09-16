@@ -123,7 +123,11 @@ pub fn main(init: std.process.Init) !void {
 
     // A PATH the caller named and the tool cannot open is a usage error, not a score: exit 2
     // with the path, rather than a stack trace.
-    var run: Report = .{ .arena = arena, .io = init.io };
+    var run: Report = .{
+        .arena = arena,
+        .io = init.io,
+        .working_directory = report.paths.canonical_working_directory(arena, init.io),
+    };
     for (options.paths) |path| run.lint_path(path) catch |failure| {
         std.debug.print("error: cannot read '{s}': {s}\n", .{ path, @errorName(failure) });
         std.process.exit(exit_usage);

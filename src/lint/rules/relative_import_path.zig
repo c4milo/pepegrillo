@@ -8,8 +8,10 @@
 //! directory the file sits in, such as `src/store/` for `src/store/journal/slots.zig`. Anywhere
 //! else it is the first path component, such as `tools/` for `tools/lint/main.zig`. A file directly
 //! inside `source_root`, or a bare file name with no directory, has no subsystem, so every path it
-//! imports leaves it. The resolution reads only the text of the path the walk built: an absolute
-//! PATH argument makes `/` the subsystem of every file.
+//! imports leaves it. The resolution reads only the text of the path the walk built. The driver
+//! makes every PATH under the working directory relative to it, so `zig build`'s absolute paths
+//! reach this file as `src/...`. A PATH outside the working directory stays absolute and makes `/`
+//! the subsystem of every file under it.
 
 const std = @import("std");
 const paths = @import("../paths.zig");
