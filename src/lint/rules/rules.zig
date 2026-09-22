@@ -8,6 +8,7 @@ pub const denied_words = @import("denied_words.zig");
 pub const unbounded_loop = @import("unbounded_loop.zig");
 pub const relative_import = @import("relative_import.zig");
 pub const defer_order = @import("defer_order.zig");
+pub const unreleased_acquire = @import("unreleased_acquire.zig");
 pub const markdown = @import("markdown.zig");
 
 test {
@@ -18,5 +19,6 @@ test {
     _ = unbounded_loop;
     _ = relative_import;
     _ = defer_order;
+    _ = unreleased_acquire;
     _ = markdown;
 }

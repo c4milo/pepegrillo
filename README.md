@@ -5,7 +5,8 @@ own rules. It has three tools:
 
 - **lint**: a driver that walks the tree and runs rules over Zig and Markdown files, and generic
   rules a project configures: `forbidden_references`, `file_length`, `magic_numbers`,
-  `denied_words`, `unbounded_loop`, `relative_import`, `defer_order` and `markdown`.
+  `denied_words`, `unbounded_loop`, `relative_import`, `defer_order`, `unreleased_acquire` and
+  `markdown`.
 - **complexity**: a cognitive-complexity scorer for every function and `test` block.
 - **commit**: a Conventional Commits linter for commit messages, and a `pre-push` hook that runs it.
 
