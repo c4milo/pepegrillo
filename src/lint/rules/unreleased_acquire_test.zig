@@ -213,6 +213,77 @@ test "a release named by no list leaves the whole block in the window" {
     try expect_findings(NoReleases, source, &.{reported("probe")});
 }
 
+// Assignments, which `read_assignments` switches on.
+
+const Assignments = unreleased_acquire.Rule(.{
+    .scope = .{ .extensions = &.{".zig"} },
+    .acquire_prefixes = &.{"open_"},
+    .read_assignments = true,
+});
+
+test "an assignment is an acquire only under read_assignments" {
+    const source: [:0]const u8 =
+        \\fn run(slots: []Socket) !void {
+        \\    for (slots) |*slot| {
+        \\        slot.* = try open_socket();
+        \\        try connect(slot.*);
+        \\    }
+        \\}
+    ;
+    try expect_findings(Rule, source, &.{});
+    try expect_findings(Assignments, source, &.{reported("slot")});
+}
+
+test "an assignment names the root of its target, through a field and a dereference" {
+    try expect_findings(Assignments,
+        \\fn run(client: *Client) !void {
+        \\    client.socket = try open_socket();
+        \\    try bind(client.socket);
+        \\}
+    , &.{reported("client")});
+}
+
+test "a defer naming the root passes an assignment acquire" {
+    try expect_findings(Assignments,
+        \\fn run(client: *Client) !void {
+        \\    client.socket = try open_socket();
+        \\    defer client.deinit();
+        \\    try bind(client.socket);
+        \\}
+    , &.{});
+}
+
+test "an acquire the statement discards binds no name and is passed" {
+    try expect_findings(Assignments,
+        \\fn run() !void {
+        \\    _ = try open_socket();
+        \\    try run_the_rest();
+        \\}
+    , &.{});
+}
+
+test "an acquire into a subscript has no root to follow and is passed" {
+    try expect_findings(Assignments,
+        \\fn run(slots: []Socket, index: usize) !void {
+        \\    slots[index] = try open_socket();
+        \\    try connect(slots[index]);
+        \\}
+    , &.{});
+}
+
+test "an assignment of something the acquire lists do not name is passed" {
+    try expect_findings(Assignments,
+        \\fn run(client: *Client) !void {
+        \\    client.socket = try connect_socket();
+        \\    try bind(client.socket);
+        \\}
+        \\fn plain(client: *Client) !void {
+        \\    client.socket = open_socket();
+        \\    try bind(client.socket);
+        \\}
+    , &.{});
+}
+
 // The configuration and the files the rule reads.
 
 test "the name, the message and the scope come from the configuration" {

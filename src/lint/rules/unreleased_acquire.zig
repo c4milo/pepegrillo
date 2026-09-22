@@ -6,7 +6,9 @@
 //! statement of the shape `const name = try <call>(...)` is an acquire when the last segment of
 //! the called function starts with one of `acquire_prefixes` or ends with one of
 //! `acquire_suffixes`. Both lists are empty by default, so the rule reports nothing until a
-//! project names the functions its own tree acquires with.
+//! project names the functions its own tree acquires with. Under `read_assignments`, which is
+//! off, `<target> = try <call>(...)` is an acquire too, of the root of its target: `slot` for
+//! `slot.* = try open_socket()`, which is how a loop fills an array of descriptors.
 //!
 //! An acquire is reported when all three hold:
 //!
@@ -31,8 +33,9 @@
 //! - An arena, a pool or a fixed buffer releases everything it handed out at once. A value taken
 //!   from one is reported unless the project leaves those functions out of its list. This is why
 //!   the lists start empty: a guessed list reports allocations that need no release.
-//! - It reads the statements of one block. A value acquired into a variable that already exists,
-//!   `slot.* = try open(path)` inside a loop, is not a declaration and is invisible to it.
+//! - It reads the statements of one block, and it reads an acquire into a variable that already
+//!   exists only under `read_assignments`. An acquire into a subscript, `slots[index] = try
+//!   open(path)`, has no root identifier to follow and is invisible either way.
 //! - A release it finds is a call with a matching name, not a proof. It cannot tell that the call
 //!   releases the value, and it cannot see a release a called function makes.
 //! - The release ends the window wherever it stands inside a statement, so one only some paths
@@ -79,6 +82,10 @@ pub const Config = struct {
     release_suffixes: []const []const u8 = &default_release_suffixes,
     /// When set, a value a `return` under the acquire names is passed: the caller owns it.
     pass_returned: bool = true,
+    /// When set, `slot.* = try open_socket()` is read as an acquire of `slot`, beside
+    /// `const slot = try open_socket()`. Off, so adopting it is the project's commit: a tree that
+    /// already runs this rule gains findings the day it is set.
+    read_assignments: bool = false,
     /// The finding text, a `std.fmt` format string. `acquired`: the name the declaration binds.
     message: []const u8 = "{[acquired]s} is acquired here and a statement under it can fail," ++
         " and no defer releases {[acquired]s}",
@@ -167,19 +174,69 @@ fn check_acquire(
     try findings.add(config.name, walker.path, location.line, location.column, message, arguments);
 }
 
-/// The name a statement binds when it is `const name = try <acquire>(...)`, or null for every
-/// other statement.
+/// The target that binds nothing. `_ = try open_socket()` acquires and discards in one statement,
+/// and no defer can release what has no name, so it is no acquire.
+const discard_target = "_";
+
+/// How far `assigned_root` walks down an assignment's target before it gives up: `a.b.c.*` is
+/// four. A target nested deeper is read as no acquire at all.
+const max_target_depth: usize = 16;
+
+/// The name a statement acquires: the name `const name = try <acquire>(...)` binds, or, when the
+/// configuration reads assignments, the root of the target of `<target> = try <acquire>(...)`.
+/// Null for every other statement.
 fn acquired_name(comptime config: Config, tree: *const Ast, statement: Node.Index) ?[]const u8 {
+    if (declared_name(config, tree, statement)) |name| return name;
+    if (!config.read_assignments) return null;
+    return assigned_name(config, tree, statement);
+}
+
+/// The name `const name = try <acquire>(...)` binds.
+fn declared_name(comptime config: Config, tree: *const Ast, statement: Node.Index) ?[]const u8 {
     const declaration = tree.fullVarDecl(statement) orelse return null;
     const initializer = declaration.ast.init_node.unwrap() orelse return null;
-    if (tree.nodeTag(initializer) != .@"try") return null;
-    const call = tree.nodeData(initializer).node;
-    if (!ast.is_call(tree.nodeTag(call))) return null;
-    var buffer: [ast.max_chain_bytes]u8 = undefined;
-    const chain = ast.chain_text(tree, ast.callee(tree, call), &buffer) orelse return null;
-    const last = ast.last_segment(chain);
-    if (!named_by(last, config.acquire_prefixes, config.acquire_suffixes)) return null;
+    if (!is_acquire(config, tree, initializer)) return null;
     return tree.tokenSlice(declaration.ast.mut_token + 1);
+}
+
+/// The root of the target of `<target> = try <acquire>(...)`: `slot` for `slot.* = ...` and for
+/// `slot.handle = ...`. The root, and not the whole target, because a `defer` releases what it
+/// names through the same root, and a root reads fewer acquires rather than false ones.
+fn assigned_name(comptime config: Config, tree: *const Ast, statement: Node.Index) ?[]const u8 {
+    if (tree.nodeTag(statement) != .assign) return null;
+    const target, const value = tree.nodeData(statement).node_and_node;
+    if (!is_acquire(config, tree, value)) return null;
+    return assigned_root(tree, target);
+}
+
+/// The identifier an assignment's target is rooted at, past its `.*` and its field accesses, or
+/// null when the target is the discard or any other expression, such as `slots[index]`.
+fn assigned_root(tree: *const Ast, target: Node.Index) ?[]const u8 {
+    var node = target;
+    for (0..max_target_depth) |_| {
+        switch (tree.nodeTag(node)) {
+            .identifier => return named_root(tree.tokenSlice(tree.nodeMainToken(node))),
+            .deref => node = tree.nodeData(node).node,
+            .field_access => node = tree.nodeData(node).node_and_token[0],
+            else => return null,
+        }
+    }
+    return null;
+}
+
+fn named_root(root: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, root, discard_target)) return null;
+    return root;
+}
+
+/// True when an expression is `try <call>(...)` over a function the acquire lists name.
+fn is_acquire(comptime config: Config, tree: *const Ast, expression: Node.Index) bool {
+    if (tree.nodeTag(expression) != .@"try") return false;
+    const call = tree.nodeData(expression).node;
+    if (!ast.is_call(tree.nodeTag(call))) return false;
+    var buffer: [ast.max_chain_bytes]u8 = undefined;
+    const chain = ast.chain_text(tree, ast.callee(tree, call), &buffer) orelse return false;
+    return named_by(ast.last_segment(chain), config.acquire_prefixes, config.acquire_suffixes);
 }
 
 /// True when `last` starts with one of `prefixes` or ends with one of `suffixes`.
