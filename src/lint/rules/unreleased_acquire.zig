@@ -8,7 +8,10 @@
 //! `acquire_suffixes`. Both lists are empty by default, so the rule reports nothing until a
 //! project names the functions its own tree acquires with. Under `read_assignments`, which is
 //! off, `<target> = try <call>(...)` is an acquire too, of the root of its target: `slot` for
-//! `slot.* = try open_socket()`, `client` for `client.socket = try open_socket()`.
+//! `slot.* = try open_socket()`, `client` for `client.socket = try open_socket()`. Under
+//! `read_subscript_targets`, off as well, the root is read through a subscript too, so
+//! `slots[index] = try open_socket()` is an acquire of `slots`: the array, and not the element,
+//! is the name a release of its elements is written through.
 //!
 //! An acquire is reported when all three hold:
 //!
@@ -16,7 +19,11 @@
 //!    `catch` whose right-hand side holds a `return`, a `break` or a `continue`. The release is
 //!    the first statement under the acquire that calls a function named by `release_prefixes` or
 //!    `release_suffixes` and names the acquired value, `close_now(socket)` for `socket`. Without
-//!    one, every statement under the acquire is read.
+//!    one, every statement under the acquire is read. Under `read_loop_reentry`, which is off, an
+//!    acquire standing inside a loop with no release anywhere under it in its block holds whether
+//!    or not anything can fail: the next turn of the loop takes another value and nothing named
+//!    the last one. The condition, the continue expression and the body of a loop stand inside
+//!    it; its `else` branch and the inputs of a `for` do not.
 //! 2. No `defer` and no `errdefer` in effect where the acquire stands names the value. Those are
 //!    the defers of its own block, above it and below it, and the defers of every block above
 //!    that one written before the statement the acquire sits inside. Each runs when its own block
@@ -39,12 +46,12 @@
 //!   from one is reported unless the project leaves those functions out of its list. This is why
 //!   the lists start empty: a guessed list reports allocations that need no release.
 //! - It reads an acquire into a variable that already exists only under `read_assignments`, and
-//!   an acquire into a subscript, `slots[index] = try open(path)`, not at all: it has no root
-//!   identifier to follow.
-//! - It reads a block's statements in the order they are written and does not know that a loop
-//!   runs its body again. An acquire that is the last statement of a loop body has nothing under
-//!   it, so nothing in its own block can fail, and the rule passes it — even though the next
-//!   iteration of that same acquire is what loses the value the last one took.
+//!   one into a subscript only under `read_subscript_targets`. A target of any other shape has no
+//!   root to follow and is invisible.
+//! - It reads one function. A function that acquires in a loop and leaves the releasing to its
+//!   caller, which every caller then has to remember, is reported under `read_loop_reentry`, and
+//!   a caller that does remember is invisible to it. That is the finding the switch is for: an
+//!   `errdefer` inside the function makes it safe whatever its callers do.
 //! - A release it finds is a call with a matching name, not a proof. It cannot tell that the call
 //!   releases the value, and it cannot see a release a called function makes.
 //! - The release ends the window wherever it stands inside a statement, so one only some paths
@@ -95,6 +102,14 @@ pub const Config = struct {
     /// `const slot = try open_socket()`. Off, so adopting it is the project's commit: a tree that
     /// already runs this rule gains findings the day it is set.
     read_assignments: bool = false,
+    /// When set, a target reached through a subscript is read too: `slots[index] = try open()`
+    /// is an acquire of `slots`, the name a release of its elements is written through. It is
+    /// read only where `read_assignments` is set, and it is off for the same reason.
+    read_subscript_targets: bool = false,
+    /// When set, an acquire inside a loop that the loop never releases is reported, whether or
+    /// not a statement under it can fail: the next turn takes another value and the last one is
+    /// gone. Off, so adopting it is the project's commit.
+    read_loop_reentry: bool = false,
     /// The finding text, a `std.fmt` format string. `acquired`: the name the declaration binds.
     message: []const u8 = "{[acquired]s} is acquired here and a statement under it can fail," ++
         " and no defer releases {[acquired]s}",
@@ -169,6 +184,8 @@ fn Walker(comptime config: Config) type {
         depth: u32 = 0,
         /// The defers in effect where the walk stands.
         registered: Registered = .{},
+        /// How many loops the walk stands inside. Every block under one runs again.
+        loop_depth: u32 = 0,
         /// The first error `visit` returned. `child` returns nothing, so the walk keeps it here
         /// and `check_file` returns it.
         failure: ?anyerror = null,
@@ -189,7 +206,37 @@ fn visit(comptime config: Config, walker: *Walker(config), node: Node.Index) !vo
     if (walker.tree.blockStatements(&buffer, node)) |statements| {
         return check_block(config, walker, statements);
     }
+    if (is_loop(walker.tree.nodeTag(node))) return visit_loop(config, walker, node);
     ast.for_each_child_reading(walker.tree, node, config.parameter_types, walker);
+}
+
+fn is_loop(tag: Node.Tag) bool {
+    if (ast.is_while(tag)) return true;
+    return switch (tag) {
+        .for_simple, .@"for" => true,
+        else => false,
+    };
+}
+
+/// Descends into one loop. Its condition, its continue expression and its body run again for
+/// every turn, so the walk stands inside a loop there. Its `else` branch runs once, after the
+/// loop ends, and the inputs of a `for` are read once before it starts, so neither does.
+fn visit_loop(comptime config: Config, walker: *Walker(config), node: Node.Index) void {
+    if (walker.tree.fullWhile(node)) |loop| {
+        walker.loop_depth += 1;
+        walker.child(loop.ast.cond_expr);
+        if (loop.ast.cont_expr.unwrap()) |continuing| walker.child(continuing);
+        walker.child(loop.ast.then_expr);
+        walker.loop_depth -= 1;
+        if (loop.ast.else_expr.unwrap()) |otherwise| walker.child(otherwise);
+        return;
+    }
+    const loop = walker.tree.fullFor(node).?;
+    for (loop.ast.inputs) |input| walker.child(input);
+    walker.loop_depth += 1;
+    walker.child(loop.ast.then_expr);
+    walker.loop_depth -= 1;
+    if (loop.ast.else_expr.unwrap()) |otherwise| walker.child(otherwise);
 }
 
 /// Reads one block's statements in order, and descends into each before the defer it may be takes
@@ -223,8 +270,11 @@ fn check_acquire(
     below: []const Node.Index,
 ) !void {
     const tree = walker.tree;
-    const reach = below[0..release_index(config, tree, acquired, below)];
-    if (!any_can_fail(config, tree, reach)) return;
+    const release = release_index(config, tree, acquired, below);
+    const reach = below[0..release];
+    const lost_on_reentry = config.read_loop_reentry and
+        walker.loop_depth > 0 and release == below.len;
+    if (!lost_on_reentry and !any_can_fail(config, tree, reach)) return;
     if (deferred_release(config, tree, acquired, below)) return;
     if (walker.registered.releases(tree, acquired, config.parameter_types)) return;
     if (config.pass_returned and returned(config, tree, acquired, below)) return;
@@ -272,18 +322,22 @@ fn assigned_name(comptime config: Config, tree: *const Ast, statement: Node.Inde
     if (tree.nodeTag(statement) != .assign) return null;
     const target, const value = tree.nodeData(statement).node_and_node;
     if (!is_acquire(config, tree, value)) return null;
-    return assigned_root(tree, target);
+    return assigned_root(config, tree, target);
 }
 
 /// The identifier an assignment's target is rooted at, past its `.*` and its field accesses, or
 /// null when the target is the discard or any other expression, such as `slots[index]`.
-fn assigned_root(tree: *const Ast, target: Node.Index) ?[]const u8 {
+fn assigned_root(comptime config: Config, tree: *const Ast, target: Node.Index) ?[]const u8 {
     var node = target;
     for (0..max_target_depth) |_| {
         switch (tree.nodeTag(node)) {
             .identifier => return named_root(tree.tokenSlice(tree.nodeMainToken(node))),
             .deref => node = tree.nodeData(node).node,
             .field_access => node = tree.nodeData(node).node_and_token[0],
+            .array_access => {
+                if (!config.read_subscript_targets) return null;
+                node = tree.nodeData(node).node_and_node[0];
+            },
             else => return null,
         }
     }
@@ -435,4 +489,5 @@ fn Returns(comptime config: Config) type {
 
 test {
     _ = @import("unreleased_acquire_test.zig");
+    _ = @import("unreleased_acquire_test_switches.zig");
 }
