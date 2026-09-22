@@ -72,7 +72,8 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 - `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`, and
   `report_line`, the finding line all three print.
 - `src/lint/` is the engine: `driver.zig`, `report.zig`, `scope.zig`, `paths.zig`, `text.zig`,
-  `ast.zig`, `ast_read.zig`, `harness.zig`. `src/lint/rules/` holds the generic rules.
+  `ast.zig`, `ast_read.zig`, `ast_scan.zig`, `harness.zig`. `src/lint/rules/` holds the generic
+  rules.
 - `src/complexity/` is the cognitive-complexity scorer and its report.
 - `src/commit/` is the commit-message linter.
 - `hooks/pre-push` is the git hook a project installs.

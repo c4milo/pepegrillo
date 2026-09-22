@@ -9,6 +9,7 @@ pub const scope = @import("scope.zig");
 pub const Scope = scope.Scope;
 pub const text = @import("text.zig");
 pub const ast = @import("ast.zig");
+pub const ast_scan = @import("ast_scan.zig");
 pub const harness = @import("harness.zig");
 pub const rules = @import("rules/rules.zig");
 
@@ -19,6 +20,7 @@ test {
     _ = @import("scope.zig");
     _ = @import("text.zig");
     _ = @import("ast.zig");
+    _ = @import("ast_scan.zig");
     _ = @import("harness.zig");
     _ = rules;
 }

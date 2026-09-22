@@ -11,12 +11,14 @@
 //! parameter types — `fn send(socket: std.posix.socket_t) void` names a forbidden type there and
 //! nowhere else — so the walk descends into them.
 //!
-//! The readers of `ast_read.zig` are re-exported at the bottom, so a rule imports this file alone.
+//! The readers of `ast_read.zig` and `ast_scan.zig` are re-exported at the bottom, so a rule
+//! imports this file alone.
 
 const std = @import("std");
 const Ast = std.zig.Ast;
 const Node = Ast.Node;
 const ast_read = @import("ast_read.zig");
+const ast_scan = @import("ast_scan.zig");
 
 /// Deepest AST node a visitor recurses into. Recursion depth is bounded by the source's
 /// syntactic nesting, and this is the ceiling on that.
@@ -363,6 +365,14 @@ pub const is_call = ast_read.is_call;
 pub const callee = ast_read.callee;
 pub const imported_path = ast_read.imported_path;
 
+// The subtree reads of `ast_scan.zig`, re-exported for the same reason.
+
+pub const max_deferred_identifiers = ast_scan.max_deferred_identifiers;
+pub const Comparison = ast_scan.Comparison;
+pub const can_fail = ast_scan.can_fail;
+pub const mentions = ast_scan.mentions;
+pub const compare_identifiers = ast_scan.compare_identifiers;
+
 // Tests.
 
 const testing = std.testing;
@@ -449,4 +459,5 @@ test "is_while names the three while shapes" {
 
 test {
     _ = ast_read;
+    _ = ast_scan;
 }

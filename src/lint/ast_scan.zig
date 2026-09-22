@@ -1,16 +1,20 @@
-//! The two reads the defer-order check makes over one block's statements:
+//! The subtree reads a rule makes of a parsed Zig file, beyond the single-node reads of
+//! `ast_read.zig`. Each walks a whole subtree and answers one question about it:
 //!
-//! - `can_fail`: whether a statement can leave the block before the statements under it run.
-//! - `compare_identifiers`: whether two subtrees name one identifier in common.
+//! - `can_fail`: whether the subtree can leave the block it sits in before the statements under it
+//!   run, through a `try` or a `catch` that returns, breaks or continues.
+//! - `mentions`: whether the subtree names one identifier.
+//! - `compare_identifiers`: whether two subtrees name an identifier in common.
 //!
-//! Split off `defer_order.zig` so that file holds the configuration and the check, and this one
-//! holds the reads. Neither read allocates. `compare_identifiers` collects the names of the
-//! deferred expression into a fixed buffer and reads the other subtree against it.
+//! Split off `ast.zig` so that file holds the walk, `ast_read.zig` holds the reads of one node and
+//! this one holds the reads of a subtree. `ast.zig` re-exports every declaration here, so a rule
+//! still writes `ast.can_fail`. No read allocates: `compare_identifiers` collects the names of the
+//! first subtree into a fixed buffer and reads the second against it.
 
 const std = @import("std");
 const Ast = std.zig.Ast;
 const Node = Ast.Node;
-const ast = @import("../ast.zig");
+const ast = @import("ast.zig");
 
 /// The most identifiers `compare_identifiers` collects from one deferred expression. An
 /// expression that names more reads as `.shared`, so the limit costs a finding and never invents
@@ -56,6 +60,20 @@ pub fn compare_identifiers(
     var match: Match = .{ .set = &names };
     walk(tree, statement, parameter_types, &match);
     return if (match.found) .shared else .none_shared;
+}
+
+/// True when the subtree at `node` names the identifier `name`, by the reading `name_of` makes.
+pub fn mentions(
+    tree: *const Ast,
+    node: Node.Index,
+    name: []const u8,
+    parameter_types: ast.ParameterTypes,
+) bool {
+    var names: NameSet = .{};
+    names.add(name);
+    var match: Match = .{ .set = &names };
+    walk(tree, node, parameter_types, &match);
+    return match.found;
 }
 
 /// True when the subtree at `node` holds a `return`, a `break` or a `continue`.
@@ -193,8 +211,7 @@ fn name_of(tree: *const Ast, node: Node.Index) ?[]const u8 {
     };
 }
 
-// Tests. The rule's tests, which drive these reads through whole files, are in
-// `defer_order_test.zig`.
+// Tests. The rules that drive these reads through whole files carry their own.
 
 const testing = std.testing;
 

@@ -22,7 +22,7 @@
 //!    `errdefer comptime unreachable`, which asserts that nothing below it can fail, is the
 //!    expression of this shape that appears in practice.
 //!
-//! The finding sits at the `defer` keyword. `defer_order_scan.zig` holds the two reads.
+//! The finding sits at the `defer` keyword. `ast_scan.zig` holds the two reads.
 //!
 //! What the rule cannot do:
 //!
@@ -42,9 +42,6 @@ const Node = Ast.Node;
 const ast = @import("../ast.zig");
 const report = @import("../report.zig");
 const Scope = @import("../scope.zig").Scope;
-const scan = @import("defer_order_scan.zig");
-
-pub const max_deferred_identifiers = scan.max_deferred_identifiers;
 
 pub const Config = struct {
     /// The name `--rule` selects and the report prints.
@@ -130,9 +127,9 @@ fn check_defer(
     previous: Node.Index,
 ) !void {
     const tree = walker.tree;
-    if (!scan.can_fail(tree, previous, config.parameter_types)) return;
+    if (!ast.can_fail(tree, previous, config.parameter_types)) return;
     const deferred = deferred_expression(tree, statement);
-    const names = scan.compare_identifiers(tree, deferred, previous, config.parameter_types);
+    const names = ast.compare_identifiers(tree, deferred, previous, config.parameter_types);
     if (names != .none_shared) return;
     const location = ast.node_location(tree, statement);
     const findings = walker.findings;
@@ -158,6 +155,5 @@ fn deferred_expression(tree: *const Ast, statement: Node.Index) Node.Index {
 }
 
 test {
-    _ = scan;
     _ = @import("defer_order_test.zig");
 }

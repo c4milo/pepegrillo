@@ -4,6 +4,7 @@
 
 const std = @import("std");
 const testing = std.testing;
+const ast = @import("../ast.zig");
 const harness = @import("../harness.zig");
 const report = @import("../report.zig");
 const defer_order = @import("defer_order.zig");
@@ -113,7 +114,7 @@ test "a deferred expression that names nothing releases nothing and is passed" {
 /// `max_deferred_identifiers` holds.
 const many_names = blk: {
     var text: []const u8 = "a0";
-    for (1..defer_order.max_deferred_identifiers) |index| {
+    for (1..ast.max_deferred_identifiers) |index| {
         text = text ++ std.fmt.comptimePrint(", a{d}", .{index});
     }
     break :blk text;
