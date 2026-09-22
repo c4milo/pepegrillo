@@ -8,7 +8,7 @@
 //! `acquire_suffixes`. Both lists are empty by default, so the rule reports nothing until a
 //! project names the functions its own tree acquires with. Under `read_assignments`, which is
 //! off, `<target> = try <call>(...)` is an acquire too, of the root of its target: `slot` for
-//! `slot.* = try open_socket()`, which is how a loop fills an array of descriptors.
+//! `slot.* = try open_socket()`, `client` for `client.socket = try open_socket()`.
 //!
 //! An acquire is reported when all three hold:
 //!
@@ -17,8 +17,13 @@
 //!    the first statement under the acquire that calls a function named by `release_prefixes` or
 //!    `release_suffixes` and names the acquired value, `close_now(socket)` for `socket`. Without
 //!    one, every statement under the acquire is read.
-//! 2. No `defer` and no `errdefer` under the acquire, in the same block, names the value. Either
-//!    one releases it however the block ends, which is the whole point of writing one.
+//! 2. No `defer` and no `errdefer` in effect where the acquire stands names the value. Those are
+//!    the defers of its own block, above it and below it, and the defers of every block above
+//!    that one written before the statement the acquire sits inside. Each runs when its own block
+//!    ends, however it ends, which is the whole point of writing one, so each releases what it
+//!    names. A defer of a block the walk has left, or of one beside the acquire's, is not in
+//!    effect and does not count. A defer above an acquire matters only for an assignment: the
+//!    name a declaration binds does not exist yet where such a defer is written.
 //! 3. No `return` under it names the value, when `pass_returned` is set. A value the block returns
 //!    belongs to its caller from there.
 //!
@@ -33,9 +38,13 @@
 //! - An arena, a pool or a fixed buffer releases everything it handed out at once. A value taken
 //!   from one is reported unless the project leaves those functions out of its list. This is why
 //!   the lists start empty: a guessed list reports allocations that need no release.
-//! - It reads the statements of one block, and it reads an acquire into a variable that already
-//!   exists only under `read_assignments`. An acquire into a subscript, `slots[index] = try
-//!   open(path)`, has no root identifier to follow and is invisible either way.
+//! - It reads an acquire into a variable that already exists only under `read_assignments`, and
+//!   an acquire into a subscript, `slots[index] = try open(path)`, not at all: it has no root
+//!   identifier to follow.
+//! - It reads a block's statements in the order they are written and does not know that a loop
+//!   runs its body again. An acquire that is the last statement of a loop body has nothing under
+//!   it, so nothing in its own block can fail, and the rule passes it — even though the next
+//!   iteration of that same acquire is what loses the value the last one took.
 //! - A release it finds is a call with a matching name, not a proof. It cannot tell that the call
 //!   releases the value, and it cannot see a release a called function makes.
 //! - The release ends the window wherever it stands inside a statement, so one only some paths
@@ -118,12 +127,48 @@ fn check_file(comptime config: Config, context: *report.Context, file: report.Fi
 
 /// The walk over every node of one file. `child` is what `ast.for_each_child_reading` calls, and
 /// every block it reaches is read as a statement list by `check_block`.
+/// The deferred expressions already registered where a statement runs: those above it in its own
+/// block, and those above the statement it sits inside in every block above that. Each releases
+/// whatever it names however its own block ends, so each protects an acquire under it.
+const Registered = struct {
+    expressions: [max_registered_defers]Node.Index = undefined,
+    count: usize = 0,
+    /// Set when a block registers more defers than `expressions` holds. Every acquire under it
+    /// then reads as released, which is the safe direction.
+    overflowed: bool = false,
+
+    fn push(self: *Registered, expression: Node.Index) void {
+        if (self.count == self.expressions.len) {
+            self.overflowed = true;
+            return;
+        }
+        self.expressions[self.count] = expression;
+        self.count += 1;
+    }
+
+    /// True when one registered expression names `acquired`.
+    fn releases(
+        self: *const Registered,
+        tree: *const Ast,
+        acquired: []const u8,
+        parameter_types: ast.ParameterTypes,
+    ) bool {
+        if (self.overflowed) return true;
+        for (self.expressions[0..self.count]) |expression| {
+            if (ast.mentions(tree, expression, acquired, parameter_types)) return true;
+        }
+        return false;
+    }
+};
+
 fn Walker(comptime config: Config) type {
     return struct {
         tree: *const Ast,
         findings: *report.Findings,
         path: []const u8,
         depth: u32 = 0,
+        /// The defers in effect where the walk stands.
+        registered: Registered = .{},
         /// The first error `visit` returned. `child` returns nothing, so the walk keeps it here
         /// and `check_file` returns it.
         failure: ?anyerror = null,
@@ -140,16 +185,31 @@ fn Walker(comptime config: Config) type {
 }
 
 fn visit(comptime config: Config, walker: *Walker(config), node: Node.Index) !void {
-    try check_block(config, walker, node);
+    var buffer: [2]Node.Index = undefined;
+    if (walker.tree.blockStatements(&buffer, node)) |statements| {
+        return check_block(config, walker, statements);
+    }
     ast.for_each_child_reading(walker.tree, node, config.parameter_types, walker);
 }
 
-fn check_block(comptime config: Config, walker: *Walker(config), node: Node.Index) !void {
-    var buffer: [2]Node.Index = undefined;
-    const statements = walker.tree.blockStatements(&buffer, node) orelse return;
+/// Reads one block's statements in order, and descends into each before the defer it may be takes
+/// effect, so every acquire is read with the defers that stand above it and no others. The defers
+/// this block registered go out of effect with the block, as they do when it ends.
+fn check_block(
+    comptime config: Config,
+    walker: *Walker(config),
+    statements: []const Node.Index,
+) !void {
+    const outer = walker.registered;
+    defer walker.registered = outer;
     for (statements, 0..) |statement, index| {
-        const acquired = acquired_name(config, walker.tree, statement) orelse continue;
-        try check_acquire(config, walker, statement, acquired, statements[index + 1 ..]);
+        if (acquired_name(config, walker.tree, statement)) |acquired| {
+            try check_acquire(config, walker, statement, acquired, statements[index + 1 ..]);
+        }
+        walker.child(statement);
+        if (deferred_expression(walker.tree, statement)) |expression| {
+            walker.registered.push(expression);
+        }
     }
 }
 
@@ -166,6 +226,7 @@ fn check_acquire(
     const reach = below[0..release_index(config, tree, acquired, below)];
     if (!any_can_fail(config, tree, reach)) return;
     if (deferred_release(config, tree, acquired, below)) return;
+    if (walker.registered.releases(tree, acquired, config.parameter_types)) return;
     if (config.pass_returned and returned(config, tree, acquired, below)) return;
     const location = ast.node_location(tree, statement);
     const findings = walker.findings;
@@ -173,6 +234,11 @@ fn check_acquire(
     const arguments = .{ .acquired = acquired };
     try findings.add(config.name, walker.path, location.line, location.column, message, arguments);
 }
+
+/// The most defers `Registered` holds at once: the defers of one block and of every block above
+/// it. A block that registers more makes the stack read as releasing everything, so the limit
+/// costs findings and never invents one.
+pub const max_registered_defers: usize = 64;
 
 /// The target that binds nothing. `_ = try open_socket()` acquires and discards in one statement,
 /// and no defer can release what has no name, so it is no acquire.

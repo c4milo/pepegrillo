@@ -284,6 +284,94 @@ test "an assignment of something the acquire lists do not name is passed" {
     , &.{});
 }
 
+test "an acquire inside a block that is a statement of another is read" {
+    try expect_findings(Rule,
+        \\fn run(path: []const u8) !void {
+        \\    {
+        \\        const socket = try open_socket(path);
+        \\        try bind(socket);
+        \\    }
+        \\}
+    , &.{reported("socket")});
+}
+
+// The defers already registered where the acquire stands.
+
+test "a defer above an assignment acquire in its own block releases it" {
+    try expect_findings(Assignments,
+        \\fn run() !void {
+        \\    var socket: Descriptor = undefined;
+        \\    defer close_now(socket);
+        \\    socket = try open_socket();
+        \\    try bind(socket);
+        \\}
+    , &.{});
+}
+
+test "a defer of the block above releases what a loop under it acquires" {
+    try expect_findings(Assignments,
+        \\fn run(client: *Client) !void {
+        \\    defer client.deinit();
+        \\    while (more()) {
+        \\        client.socket = try open_socket();
+        \\        try bind(client.socket);
+        \\    }
+        \\}
+    , &.{});
+}
+
+test "a defer of a block the walk has left releases nothing under it" {
+    try expect_findings(Assignments,
+        \\fn run(client: *Client) !void {
+        \\    {
+        \\        defer client.deinit();
+        \\    }
+        \\    client.socket = try open_socket();
+        \\    try bind(client.socket);
+        \\}
+    , &.{reported("client")});
+}
+
+test "a defer under the acquire's own block does not reach a block beside it" {
+    try expect_findings(Assignments,
+        \\fn run(client: *Client) !void {
+        \\    {
+        \\        client.socket = try open_socket();
+        \\        try bind(client.socket);
+        \\    }
+        \\    defer client.deinit();
+        \\}
+    , &.{reported("client")});
+}
+
+test "a declaration acquire cannot be released by a defer above it" {
+    // The name does not exist yet where that defer is written, so the walk changes nothing here.
+    try expect_findings(Rule,
+        \\fn run(path: []const u8) !void {
+        \\    defer close_all();
+        \\    const socket = try open_socket(path);
+        \\    try bind(socket);
+        \\}
+    , &.{reported("socket")});
+}
+
+/// One defer more than the stack of defers in effect holds, none of them naming the acquire.
+const crowding_defers = blk: {
+    var text: []const u8 = "";
+    for (0..unreleased_acquire.max_registered_defers + 1) |index| {
+        text = text ++ std.fmt.comptimePrint("    defer t{d}();\n", .{index});
+    }
+    break :blk text;
+};
+
+test "a block registering more defers than the stack holds releases everything under it" {
+    const source = "fn run() !void {\n" ++ crowding_defers ++
+        "    var socket: Descriptor = undefined;\n" ++
+        "    socket = try open_socket();\n" ++
+        "    try bind(socket);\n}\n";
+    try expect_findings(Assignments, source, &.{});
+}
+
 // The configuration and the files the rule reads.
 
 test "the name, the message and the scope come from the configuration" {
