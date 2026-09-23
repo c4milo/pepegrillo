@@ -32,6 +32,15 @@
 //! Checks 1 to 3 report `reference to <name>`, and check 4 reports `<function> takes
 //! <description>`. When `reason` is set, `: <reason>` follows either message.
 //!
+//! `resolve_file_aliases` makes checks 1 and 2 read a chain a second time, through the file's
+//! aliases. An alias is a `const` declared at the top level of the file whose value is a chain or
+//! `@import("std")`, which reads as `std`: `const linux = std.os.linux;`. A chain whose first
+//! segment names an alias is read again with the alias's value in place of that segment, so
+//! `linux.clock_gettime` is also read as `std.os.linux.clock_gettime`. An alias of an alias
+//! resolves the same way. When check 1 forbids a chain only through an alias, the finding is
+//! `reference to <resolved name> through <alias>`. The written chain is read first, so the switch
+//! can add findings and never removes one.
+//!
 //! `parameter_types` chooses which parameter types the walk reads. `every_prototype` reads them
 //! all. `simple_prototypes_only` reads the parameter of a prototype that declares at most one
 //! parameter and no `align`, `addrspace`, `linksection` or `callconv`, and reads only the return
@@ -39,7 +48,11 @@
 //!
 //! What the rule cannot see: a value passed as `anytype`, which carries no type expression, and
 //! a forbidden declaration re-exported under another name, `const clock = other.clock;`. The
-//! rule reads the text of the source, not its types.
+//! rule reads the text of the source, not its types. `resolve_file_aliases` narrows the second
+//! kind to these shapes, which it still cannot see: an alias declared in a function or in a
+//! container below the top level, an alias whose value is not a chain (`if (a) std.c else
+//! std.os.linux`, `@field(std, "c")`), a chain that starts with `@import("std")` written in place,
+//! and a name another file exports. Check 3 and check 4 read the chain as written.
 
 const std = @import("std");
 const ast = @import("../ast.zig");
@@ -93,6 +106,9 @@ pub const Config = struct {
     method_calls: MethodCalls = .{},
     parameter_check: ?ParameterCheck = null,
     parameter_types: ParameterTypes = .every_prototype,
+    /// When set, checks 1 and 2 also read a chain through the file-level aliases the header
+    /// describes.
+    resolve_file_aliases: bool = false,
     /// Printed after every finding, following `: `. Null prints the finding alone.
     reason: ?[]const u8 = null,
 };
