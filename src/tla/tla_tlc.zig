@@ -147,15 +147,19 @@ pub const Invocation = struct {
     /// Relative to the model directory, which TLC runs in.
     configuration: []const u8,
     module: []const u8,
+    /// TLC's own options beyond these, such as `-simulate num=10 -depth 41 -seed 1` for a run of
+    /// random walks in place of a check.
+    tlc_options: []const []const u8 = &.{},
 };
 
-/// The command line: `java <options> -cp <jar> tlc2.TLC -workers <n> -metadir <states> -config
-/// <configuration> <module>`.
+/// The command line: `java <options> -cp <jar> tlc2.TLC <TLC options> -workers <n> -metadir
+/// <states> -config <configuration> <module>`.
 pub fn argv(arena: Allocator, invocation: Invocation) ![]const []const u8 {
     var arguments: std.ArrayList([]const u8) = .empty;
     try arguments.append(arena, invocation.java_program);
     try arguments.appendSlice(arena, invocation.java_options);
     try arguments.appendSlice(arena, &.{ "-cp", invocation.jar, "tlc2.TLC" });
+    try arguments.appendSlice(arena, invocation.tlc_options);
     try arguments.appendSlice(arena, &.{ "-workers", invocation.workers, "-metadir", invocation.states });
     try arguments.appendSlice(arena, &.{ "-config", invocation.configuration, invocation.module });
     return arguments.items;
@@ -222,6 +226,27 @@ test "argv runs TLC from the jar on one configuration and its module" {
     const expected = [_][]const u8{
         "java", "-XX:+UseParallelGC", "-cp", "/j.jar",  "tlc2.TLC",               "-workers",
         "auto", "-metadir",           "/s",  "-config", "mutants/skip_fsync.cfg", "MCStore",
+    };
+    try testing.expectEqual(expected.len, got.len);
+    for (expected, got) |want, have| try testing.expectEqualStrings(want, have);
+}
+
+test "argv puts TLC's own options after its class and before the configuration" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const got = try argv(arena_state.allocator(), .{
+        .java_program = "java",
+        .java_options = &.{},
+        .workers = "1",
+        .jar = "/j.jar",
+        .states = "/s",
+        .configuration = "trace/Walk.cfg",
+        .module = "MCStoreWalk",
+        .tlc_options = &.{ "-simulate", "num=10", "-depth", "41" },
+    });
+    const expected = [_][]const u8{
+        "java",     "-cp", "/j.jar",   "tlc2.TLC", "-simulate", "num=10",         "-depth",      "41",
+        "-workers", "1",   "-metadir", "/s",       "-config",   "trace/Walk.cfg", "MCStoreWalk",
     };
     try testing.expectEqual(expected.len, got.len);
     for (expected, got) |want, have| try testing.expectEqualStrings(want, have);

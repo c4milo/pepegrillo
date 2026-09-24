@@ -116,8 +116,9 @@ pub fn run(context: Context, comptime project: Config, given: []const []const u8
 }
 
 /// The jar, fetched into the cache when neither the variable nor the cache has it, and refused
-/// unless its SHA-256 is the pinned one.
-fn verified_jar(context: Context, comptime project: Config) ![]const u8 {
+/// unless its SHA-256 is the pinned one. Public for a project's tool that runs TLC some other way,
+/// such as for random walks, and holds TLC to the same pin.
+pub fn verified_jar(context: Context, comptime project: Config) ![]const u8 {
     const path = try tlc.jar_path(context.arena, context.environ, project.tlc_release);
     const named_by_variable = context.environ.get(tlc.jar_variable) != null;
     Io.Dir.cwd().access(context.io, path, .{}) catch |failure| switch (failure) {
