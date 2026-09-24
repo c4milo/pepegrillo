@@ -6,7 +6,7 @@ const std = @import("std");
 const pepegrillo = @import("pepegrillo");
 
 /// The scopes of CLAUDE.md, Commits: one per tool, plus the hook and the build.
-const scopes = [_][]const u8{ "lint", "complexity", "commit", "hooks", "build" };
+const scopes = [_][]const u8{ "lint", "complexity", "commit", "tla", "lean", "hooks", "build" };
 
 pub const config: pepegrillo.commit.Config = .{
     .scope_admits_digits = false,
@@ -58,7 +58,7 @@ test "every scope CLAUDE.md names passes" {
 test "a scope CLAUDE.md does not name draws a warning, and a digit is refused" {
     try expect_findings("feat(store): add the reader\n", &.{
         "warning: scope-known: the scope \"store\" is not one of the scopes CLAUDE.md names " ++
-            "(lint, complexity, commit, hooks, build)",
+            "(lint, complexity, commit, tla, lean, hooks, build)",
     });
     try expect_findings("feat(h2): add the reader\n", &.{
         "violation: subject-format: the scope holds a byte that is not a lowercase letter or a " ++

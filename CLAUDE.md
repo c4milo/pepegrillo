@@ -2,7 +2,8 @@
 
 pepegrillo is the developer tooling a Zig 0.16 project runs from its build to hold its tree to its
 own rules. It holds a lint engine with generic rules a project configures, a cognitive-complexity
-scorer, and a commit-message linter. Home: github.com/c4milo/pepegrillo.
+scorer, a commit-message linter, a runner for TLA+ models under TLC, and a runner for Lean proofs
+under lake. Home: github.com/c4milo/pepegrillo.
 
 ## What pepegrillo is
 
@@ -12,8 +13,10 @@ scorer, and a commit-message linter. Home: github.com/c4milo/pepegrillo.
   that project, written against `lint.report`, `lint.ast`, `lint.paths` and `lint.harness`.
 - **It names no project that uses it.** No project name appears in code, tests, fixtures, or
   documents. Fixtures use neutral names such as `src/store/page.zig`.
-- **Developer tooling.** It reads the filesystem, runs git, and allocates from an arena. A project
-  runs it from its build and never links it into what it ships.
+- **Developer tooling.** It reads the filesystem, runs git, TLC, lake and curl, and allocates from
+  an arena. A project runs it from its build and never links it into what it ships.
+- **One layout for formal specifications.** TLA+ models live in `spec/tla/<model>/` and a Lean
+  project in `spec/lean/`, in every project that uses the `tla` and `lean` tools.
 - **No dependencies.** The Zig standard library only.
 
 ## Behaviour is part of the interface
@@ -60,7 +63,7 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 
 - A Conventional Commit: `type(scope)!: description`. The type is one of `feat`, `fix`, `docs`,
   `test`, `refactor`, `perf`, `build`, `ci`, `chore`. The scopes are `lint`, `complexity`,
-  `commit`, `hooks` and `build`.
+  `commit`, `tla`, `lean`, `hooks` and `build`.
 - The description is imperative, starts with a lowercase letter, has no final period, and the
   subject line stays at or under 72 columns.
 - One blank line after the subject. A body line stays at or under 100 columns, and the body stays
@@ -69,13 +72,16 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 
 ## Layout
 
-- `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`, and
-  `report_line`, the finding line all three print.
+- `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`, `tla`,
+  `lean`, and `report_line`, the finding line every tool prints.
 - `src/lint/` is the engine: `driver.zig`, `report.zig`, `scope.zig`, `paths.zig`, `text.zig`,
   `ast.zig`, `ast_read.zig`, `ast_scan.zig`, `names.zig`, `harness.zig`. `src/lint/rules/` holds
   the generic rules.
 - `src/complexity/` is the cognitive-complexity scorer and its report.
 - `src/commit/` is the commit-message linter.
+- `src/tla/` runs TLC: `tla.zig` the tool, `tla_models.zig` where the configurations are,
+  `tla_header.zig` what each one expects, `tla_tlc.zig` the jar, its pin and TLC's verdict.
+- `src/lean/` runs lake over a project's Lean proofs.
 - `hooks/pre-push` is the git hook a project installs.
 - `tools/` holds pepegrillo's own configured entry points, which run pepegrillo over itself.
 
