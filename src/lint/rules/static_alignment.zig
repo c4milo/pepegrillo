@@ -12,7 +12,8 @@
 //! file's top level, or a `struct`, `union`, `enum` or `opaque`, including one declared inside a
 //! function or a `test` block. A function's local variables are not read. It reports a `var` that
 //! declares no `align(...)`, with `var <name> declares no alignment: write align(@alignOf(<type>))`,
-//! unless:
+//! where `<type>` is the declared type under any arrays and optionals, since an array or an optional
+//! has its element's alignment. It reports none when:
 //!
 //! 1. It is `extern`: another object defines it.
 //! 2. Its declared type is a primitive (`u8`, `usize`, `bool`, `f64`, `c_int`, ...), a pointer or
@@ -112,14 +113,14 @@ const Visitor = struct {
                 .{variable},
             );
         };
-        if (!needs_alignment(self.tree, type_node)) return;
+        const element = element_needing_alignment(self.tree, type_node) orelse return;
         try self.findings.add(
             self.name,
             self.path,
             location.line,
             location.column,
             "var {s} declares no alignment: write align(@alignOf({s}))",
-            .{ variable, self.tree.getNodeSource(type_node) },
+            .{ variable, self.tree.getNodeSource(element) },
         );
     }
 };
@@ -129,24 +130,25 @@ fn is_extern(tree: *const Ast, declaration: Ast.full.VarDecl) bool {
     return tree.tokenTag(token) == .keyword_extern;
 }
 
-/// True unless a global of this declared type is placed right whatever the backend: a primitive,
-/// a pointer or a slice, or an array or an optional of one of those.
-fn needs_alignment(tree: *const Ast, type_node: Node.Index) bool {
+/// The part of a declared type whose alignment a global of that type must state: the type under
+/// any arrays and optionals. Null when the global is placed right whatever the backend: its type
+/// is a primitive, a pointer or a slice, or an array or an optional of one of those.
+fn element_needing_alignment(tree: *const Ast, type_node: Node.Index) ?Node.Index {
     var node = type_node;
     var depth: u32 = 0;
     while (depth < max_type_depth) : (depth += 1) {
         switch (tree.nodeTag(node)) {
             .identifier => {
                 const type_name = tree.tokenSlice(tree.nodeMainToken(node));
-                return !std.zig.primitives.isPrimitive(type_name);
+                return if (std.zig.primitives.isPrimitive(type_name)) null else node;
             },
-            .ptr_type_aligned, .ptr_type_sentinel, .ptr_type, .ptr_type_bit_range => return false,
+            .ptr_type_aligned, .ptr_type_sentinel, .ptr_type, .ptr_type_bit_range => return null,
             .optional_type => node = tree.nodeData(node).node,
             .array_type, .array_type_sentinel => node = tree.fullArrayType(node).?.ast.elem_type,
-            else => return true,
+            else => return node,
         }
     }
-    return true;
+    return node;
 }
 
 test {

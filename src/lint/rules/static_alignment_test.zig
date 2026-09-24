@@ -22,7 +22,7 @@ fn expect_findings(
     try harness.expect_messages(findings, expected);
 }
 
-test "static-alignment flags a var of a named type, an array or optional of one, and a call" {
+test "static-alignment flags a named type, an array or optional of one by its element, and a call" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const findings = try harness.run(arena_state.allocator(), static_alignment.Rule(everywhere), "src/a.zig",
@@ -36,8 +36,8 @@ test "static-alignment flags a var of a named type, an array or optional of one,
     try harness.expect_messages(findings, &.{
         "var holder declares no alignment: write align(@alignOf(Holder))",
         "var loop declares no alignment: write align(@alignOf(backend.Loop))",
-        "var slots declares no alignment: write align(@alignOf([4]Holder))",
-        "var maybe declares no alignment: write align(@alignOf(?Holder))",
+        "var slots declares no alignment: write align(@alignOf(Holder))",
+        "var maybe declares no alignment: write align(@alignOf(Holder))",
         "var counter declares no alignment: write align(@alignOf(std.atomic.Value(u32)))",
     });
     try testing.expectEqual(2, findings[0].line);
@@ -90,7 +90,7 @@ test "static-alignment reads the vars of a struct, a union and a struct inside a
     , &.{
         "var inner declares no alignment: write align(@alignOf(Holder))",
         "var chosen declares no alignment: write align(@alignOf(Holder))",
-        "var entries declares no alignment: write align(@alignOf([4]Entry))",
+        "var entries declares no alignment: write align(@alignOf(Entry))",
         "var seen declares no alignment: write align(@alignOf(Holder))",
     });
 }
