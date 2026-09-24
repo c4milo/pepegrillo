@@ -10,6 +10,7 @@ pub const relative_import = @import("relative_import.zig");
 pub const defer_order = @import("defer_order.zig");
 pub const unreleased_acquire = @import("unreleased_acquire.zig");
 pub const markdown = @import("markdown.zig");
+pub const static_alignment = @import("static_alignment.zig");
 
 test {
     _ = forbidden_references;
@@ -21,4 +22,5 @@ test {
     _ = defer_order;
     _ = unreleased_acquire;
     _ = markdown;
+    _ = static_alignment;
 }
