@@ -291,12 +291,18 @@ project ruled on the strength of one.
 ### Copies and fills
 
 - Debug and ReleaseSafe fill memory declared `undefined` with 0xAA. A function with a local
-  `var batch: [512]u64 = undefined` calls `memset` over 4 KiB on every call; one such array cost
-  a round trip 396 instructions. Keep a large scratch array in the state or in a static, where the
-  fill happens once.
-- Without libc, `memset` is compiler_rt's loop of one byte at a time, so that fill, and every
-  `@memset` whose length is known only at run time, costs a store per byte. compiler_rt's
-  `memcpy` moves a vector at a time.
+  `var batch: [512]u64 = undefined` calls `memset` over 4 KiB on every call. One such array cost
+  a round trip 396 instructions, and an encoder's scratch arrays filled about 14 KiB a block. Size
+  a scratch array to its data, or keep it in the caller's state, where the fill happens once.
+- On Linux, a Zig executable contains compiler_rt's `memset`, a loop that stores one byte at a
+  time, and that copy serves every `memset` call in the program, with glibc linked or without;
+  on macOS, libSystem's `memset` serves it. A 32 KiB `@memset` took 33,500 cycles and 100,000
+  instructions on a Neoverse N2, against 1,200 cycles on an M1.
+- The 0xAA fill, an `@memset` that LLVM does not expand inline, and a zeroing loop that LLVM
+  recognizes all become that call: a loop of 16-byte vector stores over 576 bytes compiled to the
+  same `memset` call as `@memset`. On a hot path, clear with vector stores in a loop that passes
+  its pointer to `std.mem.doNotOptimizeAway`, which keeps the stores. compiler_rt's `memcpy`
+  moves a vector at a time.
 - Assigning a struct copies all of it. Copying a fixed-capacity list whole moved 2,448 bytes and
   took a cache hit from 7.0 to 34.3 ns. Copy the used part.
 - A function that returned an 8 MiB table by value overflowed an 8 MiB stack. Initialize a large
