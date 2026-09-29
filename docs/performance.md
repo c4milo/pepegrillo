@@ -4,10 +4,10 @@ The method every performance change follows in a project that adopts pepegrillo,
 or agent, who touches a hot path. Each project keeps an appendix of its own, `docs/performance.md`
 in its tree, with its instruments, its admission rule, its baselines, its costs and the pitfalls it
 has paid for; this document is the part they share, and its last section holds what Zig 0.16 does
-to hot code. The discipline is Abseil's, applied to a tree that ships no allocation and no I/O on
-its hot paths: [the index](https://abseil.io/fast/), starting with
-[Performance Hints](https://abseil.io/fast/hints.html). Where a step follows one of its episodes,
-the episode is linked.
+to hot code. The discipline is Abseil's, applied to trees that allocate nothing on their hot
+paths, whether a path computes over memory or waits on I/O: [the index](https://abseil.io/fast/),
+starting with [Performance Hints](https://abseil.io/fast/hints.html). Where a step follows one of
+its episodes, the episode is linked.
 
 Every change walks six steps, in order: measure the gap, attribute the cost, choose the lever, build
 with the hardware in mind, prove it, land it. A skipped step costs days.
@@ -22,10 +22,12 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   stand in for time only where instructions bind (step 2), and code that spins or polls retires
   instructions in proportion to the time it waits. When the filter and the judge disagree, the judge
   decides.
-- A number is the median of five runs with its spread, every candidate interleaved in one harness
-  with pinned versions, on the machine written down beside it, with the Zig version, the optimize
-  mode and the CPU the build targets ([#39](https://abseil.io/fast/39),
-  [#75](https://abseil.io/fast/75), [#88](https://abseil.io/fast/88)).
+- A number is the median of five runs with its spread, the slowest run less the fastest as a share
+  of the median. Every candidate is interleaved in one harness with pinned versions, on the machine
+  written down beside it, with the Zig version, the optimize mode and the CPU the build targets
+  ([#39](https://abseil.io/fast/39), [#75](https://abseil.io/fast/75),
+  [#88](https://abseil.io/fast/88)). Five runs resolve a difference of a few percent; a smaller
+  bar needs more runs or more jobs.
 - The harness runs the code the way its callers do:
   - Unmeasured rounds come first, so the first candidate does not pay the process's warm-up: page
     faults, cold caches and branch predictors, a processor still raising its clock speed.
@@ -40,9 +42,12 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
     with the same code on the measured path gave 42.8, 45.0 and 52.7 ns.
   - Two builds compare only when the same harness source made them; a change to the harness
     rebuilds the baseline.
-- A change stays when it wins past the noise in the judge's runs and no input loses past the noise
-  in any of them; the appendix states the rule in numbers. Report the losses first, and every
-  figure that goes with a speed, such as a stream's compression or a request's size.
+- The noise an input must pass is the larger of its spread and the floor the appendix sets. A
+  change stays when an input wins past the noise in every one of at least two paired jobs, each
+  measuring the base and the change in one run, and no input loses past the noise in any job. A
+  win smaller than the layout noise the appendix records must hold on a second CPU model too,
+  since a rebuild alone moves a number that far. Report the losses first, and every figure that
+  goes with a speed, such as a stream's compression or a request's size.
 - A baseline's own speed can drift between the phases of one paired job. In one job, ten inputs
   lost 4 to 7% against a baseline although the code measured was byte for byte the same in both
   phases, and the next job reversed every loss. When a change touches one target, show from the
@@ -50,6 +55,12 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   target it touches.
 - Compare designs per unit of work, not per second ([#7](https://abseil.io/fast/7)): instructions
   per symbol, per frame, per request, per operation.
+- Where the unit waits on I/O, such as a request, a message or a lookup, the number is a
+  distribution as well as a rate: the median, the 99th and 99.9th percentiles and the maximum, at
+  an offered load written beside them. The load comes from a generator that sends on a schedule. A
+  generator that waits for each reply sends nothing while the system stalls, so its percentiles
+  leave the stall out. The histogram's buckets are narrower than the difference the change claims,
+  and a percentile that loses past the noise is a loss.
 
 ## 2. Attribute the cost
 
@@ -61,8 +72,15 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   There, price a branch with counters and A/B runs, and read a sample only as where the time goes.
 - Split the whole into the parts the code does not: a harness that stops after a header, a counter
   of the units a stream or a request holds, so that totals become per-unit costs.
+- Count what a unit costs the kernel: system calls, wakeups and context switches per unit, from the
+  kernel's counters or its tracepoints. On a busy machine a count is evidence where a time is not.
+  A tracer that stops the process at every call changes the batching it counts.
 - Compare a baseline part by part: sample its binary by function names. Never read its source; the
   baseline is an oracle and a number, not a design.
+- Where the judge exposes the counters, split its issue slots first, the top-down way: slots the
+  front end left empty, slots spent on work a mispredict threw away, slots stalled on memory or on
+  the execution units, and slots that retired an instruction. Linux `perf stat` reports the split
+  on recent Intel, AMD and Neoverse cores, and it says which resource below to test first.
 - Name the binding resource before cutting anything. Instructions bind when instructions per cycle
   are high and the instruction ratio matches the time ratio. A latency chain binds when a cut of
   instructions measures flat: one lookup waiting on the last symbol's shift. Branches bind when
@@ -116,7 +134,8 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   in a block after the loop, entered by a branch left untaken and ending in a branch back to the
   loop, as the compiler places cold blocks. A loop with the compiler's instructions and one more
   taken branch per unit ran 2.4% slower on a Neoverse N2, where an M1 Pro ran it 6% faster.
-- Align a loop's top to a fetch line.
+- In assembly, align a loop's top to a fetch line only where the judge shows the gain. Alignment
+  alone moves a result a few percent either way, and outside assembly Zig gives no control of it.
 
 **Memory.**
 
@@ -188,9 +207,12 @@ loop handles least, the smallest inputs for a header, the largest for history.
 ## 6. Land it
 
 - One change per branch, measured alone, with the branch deleted once its numbers are recorded.
-- The commit body names the cost removed, the filter's numbers, and each mutation's verdict.
+- The commit body names the cost removed, the judge's runs and ratios, and each mutation's
+  verdict.
 - The judge's runs, compared inside each run, recorded where the project records them; the main
   branch takes the change only when the appendix's rule admits it.
+- A ruled exception, runtime safety off or a loop in assembly, is measured again at each Zig
+  upgrade against the path it replaced, and leaves with its code once that path matches it.
 - Never push a performance change unmeasured, and never chain a push after a step that can stop
   halfway.
 
@@ -198,7 +220,9 @@ loop handles least, the smallest inputs for a header, the largest for history.
 
 - The filter and the judge: the machines, the commands, where a number is published and where it
   is not.
-- The admission rule in numbers: the bar a win or a loss must pass, and how many runs.
+- The admission rule in numbers: the floor a win or a loss must pass, the layout noise a rebuild
+  alone gives on the judge, and how many runs and jobs.
+- For a unit that waits on I/O, the offered loads and the percentiles the judge reports.
 - The baselines, and how the project compares against them without reading their source.
 - The costs table: what a first-level hit, a miss, a mispredict, a copy and a syscall cost on the
   judge, measured, with the run they came from.
