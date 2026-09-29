@@ -86,7 +86,8 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
   `tla_header.zig` what each one expects, `tla_tlc.zig` the jar, its pin and TLC's verdict.
 - `src/lean/` runs lake over a project's Lean proofs.
 - `hooks/pre-push` is the git hook a project installs.
-- `docs/` holds what the projects share in prose: `performance.md`.
+- `docs/` holds what the projects share in prose: `performance.md`. It ships in the package, so a
+  project's build installs the method at the commit it pins (`zig build guide` in the projects).
 - `tools/` holds pepegrillo's own configured entry points, which run pepegrillo over itself.
 
 ## Commands
