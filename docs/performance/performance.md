@@ -164,6 +164,10 @@ loop handles least, the smallest inputs for a header, the largest for history.
   branch takes the change only when the appendix's rule admits it.
 - A ruled exception, runtime safety off or a loop in assembly, is measured again at each Zig
   upgrade against the path it replaced, and leaves with its code once that path matches it.
+- pepegrillo's `instructions` tool holds each benchmark case to its instructions per operation on
+  every commit, since a count is the same on a busy runner and a time is not. A change that moves a
+  count writes the baseline anew, and its commit says why. The judge's times still decide what a
+  count cannot see: a miss, a mispredict, a wait.
 - Never push a performance change unmeasured, and never chain a push after a step that can stop
   halfway.
 
@@ -174,6 +178,8 @@ loop handles least, the smallest inputs for a header, the largest for history.
 - The admission rule in numbers: the floor a win or a loss must pass, the layout noise a rebuild
   alone gives on the judge, and how many runs and jobs.
 - For a unit that waits on I/O, the offered loads and the percentiles the judge reports.
+- The cases the instruction count holds, and its threshold, when the project runs the
+  `instructions` tool.
 - The baselines, and how the project compares against them without reading their source.
 - The costs table: what a first-level hit, a miss, a mispredict, a copy and a syscall cost on the
   judge, measured, with the run they came from.
