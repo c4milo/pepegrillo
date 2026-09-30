@@ -12,6 +12,7 @@ pub const unreleased_acquire = @import("unreleased_acquire.zig");
 pub const markdown = @import("markdown.zig");
 pub const static_alignment = @import("static_alignment.zig");
 pub const global_state = @import("global_state.zig");
+pub const undefined_fill = @import("undefined_fill.zig");
 
 test {
     _ = forbidden_references;
@@ -25,4 +26,5 @@ test {
     _ = markdown;
     _ = static_alignment;
     _ = global_state;
+    _ = undefined_fill;
 }
