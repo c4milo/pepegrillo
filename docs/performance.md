@@ -192,9 +192,9 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   ([hints](https://abseil.io/fast/hints.html)).
 - A latency chain shortens only with fewer dependent steps or two chains overlapped; fewer
   instructions do nothing for it.
-- A block loop that moves a pointer and a length on each side pays four additions and two tests a
-  block. Count the blocks first, cut both sides to them, and step one index: a 16-byte loop lost 7
-  of its 24 instructions, its bounds checks folded away.
+- A shorter loop is a guess until a paired run shows the gain. Stepping one index over counted
+  blocks cut a 16-byte loop from 24 instructions to 16, and llvm-mca predicted 15% fewer cycles
+  on a Neoverse N2; there, two paired runs measured it 2 to 9% slower over text strings.
 
 **Seeing what a profile cannot.** `llvm-mca` over a loop's text gives its dependency chains and
 its throughput per iteration ([#99](https://abseil.io/fast/99)); it assumes every load hits the
