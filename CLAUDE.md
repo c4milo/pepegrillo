@@ -18,9 +18,10 @@ under lake. Home: github.com/c4milo/pepegrillo.
 - **One layout for formal specifications.** TLA+ models live in `spec/tla/<model>/` and a Lean
   project in `spec/lean/`, in every project that uses the `tla` and `lean` tools.
 - **No dependencies.** The Zig standard library only.
-- **One method for performance work.** `docs/performance.md` is the method every performance
-  change follows in a project that adopts pepegrillo; each project keeps its own appendix beside
-  it, with its instruments, its admission rule and its pitfalls.
+- **One method for performance work.** `docs/performance/` holds the method every performance
+  change follows in a project that adopts pepegrillo: its six steps, its rules for the hardware,
+  and what Zig 0.16 does to hot code. Each project keeps its own appendix beside it, with its
+  instruments, its admission rule and its pitfalls.
 
 ## Behaviour is part of the interface
 
@@ -86,8 +87,10 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
   `tla_header.zig` what each one expects, `tla_tlc.zig` the jar, its pin and TLC's verdict.
 - `src/lean/` runs lake over a project's Lean proofs.
 - `hooks/pre-push` is the git hook a project installs.
-- `docs/` holds what the projects share in prose: `performance.md`. It ships in the package, so a
-  project's build installs the method at the commit it pins (`zig build guide` in the projects).
+- `docs/` holds what the projects share in prose: `performance/`, the method, split by the file rule
+  above with `performance.md` as its entry point. It ships in the package, so a project's build
+  installs the method at the commit it pins (`zig build guide` in the projects).
+  `docs/performance.md` points to the folder until every project installs the folder.
 - `tools/` holds pepegrillo's own configured entry points, which run pepegrillo over itself.
 
 ## Commands
