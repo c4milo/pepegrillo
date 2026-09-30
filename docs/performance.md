@@ -41,7 +41,8 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   - Candidates share one binary where they can. A rebuild alone moves a number: three binaries
     with the same code on the measured path gave 42.8, 45.0 and 52.7 ns.
   - Two builds compare only when the same harness source made them; a change to the harness
-    rebuilds the baseline.
+    rebuilds the baseline. So must its code: one caller passing the shared timing loop a slice of a
+    length known only at run time left a check in it for every row.
 - The noise an input must pass is the larger of its spread and the floor the appendix sets. A
   change stays when an input wins past the noise in every one of at least two paired jobs, each
   measuring the base and the change in one run, and no input loses past the noise in any job. A
@@ -53,6 +54,10 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   phases, and the next job reversed every loss. When a change touches one target, show from the
   disassembly that the other targets' code is unchanged, say so, and judge the change on the
   target it touches.
+- A move is placement, not the change's, when the program built at both commits runs that input on
+  code identical apart from its addresses: build the benchmark for the judge's targets at both
+  commits, and compare every function, addresses masked, within its symbol's size. Placement alone
+  moved identical code 21 to 38% on one x86-64 core and up to 14% on another.
 - Compare designs per unit of work, not per second ([#7](https://abseil.io/fast/7)): instructions
   per symbol, per frame, per request, per operation.
 - Where the unit waits on I/O, such as a request, a message or a lookup, the number is a
@@ -72,6 +77,9 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   There, price a branch with counters and A/B runs, and read a sample only as where the time goes.
 - Split the whole into the parts the code does not: a harness that stops after a header, a counter
   of the units a stream or a request holds, so that totals become per-unit costs.
+- When no profile line holds a tenth of the time, count instructions per unit on inputs of one
+  kind of unit each, at two round counts differenced to cancel setup. The cheapest kind gives the
+  base cost, and each kind's excess its part: a number's 126 against a baseline's 35, on an M1 Pro.
 - Count what a unit costs the kernel: system calls, wakeups and context switches per unit, from the
   kernel's counters or its tracepoints. On a busy machine a count is evidence where a time is not.
   A tracer that stops the process at every call changes the batching it counts.
@@ -99,6 +107,8 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
 - Then structural costs: a sort per code, a call per symbol, a library call per small copy, a
   frame that spills a loop's registers, an exit from a loop per unit of work, a syscall per frame.
   Each names the cost it removes ([#72](https://abseil.io/fast/72)).
+- A machine that steps once per byte is a reference: take the common shapes directly, leave the
+  rest to it, and prove the two agree on every short input over the grammar's letters.
 - One tradeoff at a time ([#79](https://abseil.io/fast/79)): one change per branch, measured alone.
 - A change that measures flat leaves, however well it reads ([#9](https://abseil.io/fast/9)); a
   claim that does not beat the noise leaves with its code.
@@ -136,6 +146,8 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   taken branch per unit ran 2.4% slower on a Neoverse N2, where an M1 Pro ran it 6% faster.
 - In assembly, align a loop's top to a fetch line only where the judge shows the gain. Alignment
   alone moves a result a few percent either way, and outside assembly Zig gives no control of it.
+- A function takes one: `align(64)` on a hot function, and on each kernel of an object whose text
+  is 16-byte aligned, keeps its loops where its own code puts them, whatever changes before it.
 
 **Memory.**
 
@@ -150,8 +162,11 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
 - A copy moves chunks of a vector register and overruns into room a margin holds, in place of an
   exact loop; where a copy overlaps its source, move a width the distance holds, so no load waits
   on the store before it.
-- Unaligned loads of a word or a vector cost nothing to speak of on the targets a project ships
-  to; aligning a table costs padding inside a named limit, so it is priced and asked for first.
+- Unaligned loads of a word, or of a 16- or 32-byte vector, cost nothing to speak of. A 64-byte
+  load across a cache line does: a 64-lane loop ran at a third of its speed on one x86-64 core,
+  a third slower on another. Start such a loop on a line, after one unaligned block, and time it
+  at several offsets from a line, since a buffer sits where its allocator put it. Aligning a table
+  costs padding inside a named limit, so it is priced and asked for first.
 - No per-unit work across a caller's boundary: one call takes everything the buffers hold.
 
 **Vectors.**
@@ -164,7 +179,10 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   across a call, and aarch64 keeps only the low 64 bits of v8 to v15.
 - A wider vector can lose, and one instruction can cost five times as much on one vendor's cores
   as on another's that report the same features. Choose a width and an instruction per CPU, from
-  measurements on that CPU.
+  measurements on that CPU. A pass that stops at the first byte of interest rescans the block at
+  each stop and lost 37% at 64 bytes, where a validator, with no stop, gained 1.4 times from 32
+  lanes to 64. On an M1 Pro, a scan a word at a time sped 18-digit runs 14% and slowed one-digit
+  runs 41%: measure the lengths the inputs hold before widening a scan.
 
 **Batching.**
 
@@ -174,6 +192,9 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   ([hints](https://abseil.io/fast/hints.html)).
 - A latency chain shortens only with fewer dependent steps or two chains overlapped; fewer
   instructions do nothing for it.
+- A block loop that moves a pointer and a length on each side pays four additions and two tests a
+  block. Count the blocks first, cut both sides to them, and step one index: a 16-byte loop lost 7
+  of its 24 instructions, its bounds checks folded away.
 
 **Seeing what a profile cannot.** `llvm-mca` over a loop's text gives its dependency chains and
 its throughput per iteration ([#99](https://abseil.io/fast/99)); it assumes every load hits the
@@ -193,9 +214,13 @@ all before a branch is pushed:
 4. The fuzzer, a short pass.
 
 Then prove the tests: break each check the change adds, one at a time, and require a test to fail.
-A `NOT CAUGHT` is a missing test, written before the commit. Three masks to expect: a run's last
+A `NOT CAUGHT` is a missing test, written before the commit. Four masks to expect: a run's last
 units handled by the reference path inside a margin, which hides a fault in the loop's tail; an
-effect a later step overwrites; and a test whose input never reaches the state the test names.
+effect a later step overwrites; a test whose input never reaches the state the test names; and a
+fast loop whose undone work the reference redoes, the output the same: test what the loop took.
+
+A path for an instruction set no development machine has runs its tests only where the judge has
+it. Have the benchmark check every path against the reference over seeded inputs before timing.
 
 Run every check once with nothing broken before counting, since a check that fails anyway makes
 every mutation look caught. Bound every wait a failing test can reach, so a mutation fails in
@@ -315,6 +340,8 @@ project ruled on the strength of one.
   call; a skew of 15 to 26% was seen. Give setup code a comptime value that no candidate uses.
   Enter each candidate with `@call(.always_inline, ...)`, or with `.never_inline` for every
   candidate when other code must call one of them too.
+- `@call(.always_inline, ...)` on a function LLVM already inlined changed its branch layout. A
+  change meant to move nothing but a function's alignment adds neither.
 - A release build merges functions whose machine code is the same into one symbol. A sampler's
   count for that symbol covers every merged function, and its callers in the binary overcount.
   Read what two instances share from their comptime arguments in the source, and what is out of
