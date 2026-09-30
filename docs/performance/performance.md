@@ -43,8 +43,9 @@ with the hardware in mind, prove it, land it. A skipped step costs days.
   - Candidates share one binary where they can. A rebuild alone moves a number: three binaries
     with the same code on the measured path gave 42.8, 45.0 and 52.7 ns.
   - Two builds compare only when the same harness source made them; a change to the harness
-    rebuilds the baseline. So must its code: one caller passing the shared timing loop a slice of a
-    length known only at run time left a check in it for every row.
+    rebuilds the baseline. The harness also compiles to the same machine code for every candidate:
+    one caller that passed the shared timing loop a slice whose length was known only at run time
+    left a bounds check in that loop for every row.
 - The noise an input must pass is the larger of its spread and the floor the appendix sets. A
   change stays when an input wins past the noise in every one of at least two paired jobs, each
   measuring the base and the change in one run, and no input loses past the noise in any job. A

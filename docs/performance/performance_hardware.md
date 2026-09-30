@@ -28,10 +28,11 @@ hardware runs it well.
   in a block after the loop, entered by a branch left untaken and ending in a branch back to the
   loop, as the compiler places cold blocks. A loop with the compiler's instructions and one more
   taken branch per unit ran 2.4% slower on a Neoverse N2, where an M1 Pro ran it 6% faster.
-- In assembly, align a loop's top to a fetch line only where the judge shows the gain. Alignment
-  alone moves a result a few percent either way, and outside assembly Zig gives no control of it.
-- A function takes one: `align(64)` on a hot function, and on each kernel of an object whose text
-  is 16-byte aligned, keeps its loops where its own code puts them, whatever changes before it.
+- Outside assembly, Zig aligns a function, not a loop inside it. `align(64)` on a hot function,
+  and on each kernel of an object whose text is 16-byte aligned, keeps its loops where its own code
+  puts them, whatever changes before it. In assembly, align a loop's top to a fetch line only where
+  the judge shows the gain: placement alone moves a result either way, by 21 to 38% on one x86-64
+  core ([step 1](performance.md#1-measure-the-gap-first)).
 
 **Memory.**
 

@@ -85,7 +85,8 @@ one.
   Enter each candidate with `@call(.always_inline, ...)`, or with `.never_inline` for every
   candidate when other code must call one of them too.
 - `@call(.always_inline, ...)` on a function LLVM already inlined changed its branch layout. A
-  change meant to move nothing but a function's alignment adds neither.
+  change meant only to move a function's alignment forces no inlining, `.always_inline` or
+  `.never_inline`.
 - A release build merges functions whose machine code is the same into one symbol. A sampler's
   count for that symbol covers every merged function, and its callers in the binary overcount.
   Read what two instances share from their comptime arguments in the source, and what is out of
