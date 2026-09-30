@@ -59,10 +59,12 @@ one.
 
 ## Copies and fills
 
-- Debug and ReleaseSafe fill memory declared `undefined` with 0xAA. A function with a local
-  `var batch: [512]u64 = undefined` calls `memset` over 4 KiB on every call. One such array cost
-  a round trip 396 instructions, and an encoder's scratch arrays filled about 14 KiB a block. Size
-  a scratch array to its data, or keep it in the caller's state, where the fill happens once.
+- Debug and ReleaseSafe fill memory declared `undefined` with 0xAA on every call, whether the
+  function reads one element or none. A 512-byte local array took 16 paired vector stores, and a
+  `var batch: [512]u64 = undefined` calls `memset` over 4 KiB. One such array cost a round trip
+  396 instructions, two more in an event loop's tick 214 of its 775 cycles, and an encoder's
+  scratch arrays filled about 14 KiB a block. Such a function also gets a stack-protector check.
+  Size a scratch array to its data, or keep it in the caller's state, where the fill happens once.
 - On Linux, a Zig executable contains compiler_rt's `memset`, a loop that stores one byte at a
   time, and that copy serves every `memset` call in the program, with glibc linked or without;
   on macOS, libSystem's `memset` serves it. A 32 KiB `@memset` took 33,500 cycles and 100,000
