@@ -79,10 +79,12 @@ one.
   On an M1 Pro running arm64 Linux, with glibc linked, a 4 KiB fill then took 94 to 100 ns where
   compiler_rt's took 1,372 to 1,377 ns, and 32 KiB 1.2 to 1.3 µs where it took 11 to 12 µs. A
   fill of about 512 bytes or less never calls `memset`, since the compiler writes it in place.
-- The override goes in a program's root file: the program a project ships, and each benchmark
-  program, whose baselines' C code calls the same `memset`. A library exports none, since its
-  caller's program owns the symbol. The guard keeps it to Linux and to Zig 0.16, so it stops at
-  the upgrade, which deletes it:
+- The override is exported by a program: the one a project ships, and each benchmark program,
+  whose baselines' C code calls the same `memset`. The function lives once, in a module the
+  programs share, which exports nothing; each program's root, or a module only programs import,
+  holds the `comptime` block that exports it. A library exports none, since its caller's program
+  owns the symbol. The guard keeps it to Linux and to Zig 0.16, so it stops at the upgrade, which
+  deletes it:
 
   ```zig
   comptime {
@@ -101,9 +103,8 @@ one.
           }
           return dest;
       }
-      var i: usize = 0;
-      while (i + 32 <= len) : (i += 32) {
-          d[i..][0..32].* = fill;
+      for (0..len / 32) |chunk| {
+          d[chunk * 32 ..][0..32].* = fill;
           std.mem.doNotOptimizeAway(d);
       }
       d[len - 32 ..][0..32].* = fill;
@@ -111,9 +112,10 @@ one.
   }
   ```
 
-  The barrier in each loop keeps the compiler from turning the loop into a call to `memset`, which
-  is this function. Building the program with `-fno-builtin` is no substitute: it makes each
-  `@memset` a byte loop in place, and the new `memset` is never called.
+  Both loops are bounded `for` loops, which an unbounded-loop lint rule passes. The barrier in each
+  keeps the compiler from turning the loop into a call to `memset`, which is this function.
+  Building the program with `-fno-builtin` is no substitute: it makes each `@memset` a byte loop
+  in place, and the new `memset` is never called.
 - Assigning a struct copies all of it. Copying a fixed-capacity list whole moved 2,448 bytes and
   took a cache hit from 7.0 to 34.3 ns. Copy the used part.
 - A function that returned an 8 MiB table by value overflowed an 8 MiB stack. Initialize a large
