@@ -65,10 +65,11 @@ one.
   396 instructions, two more in an event loop's tick 214 of its 775 cycles, and an encoder's
   scratch arrays filled about 14 KiB a block. Such a function also gets a stack-protector check.
   Size a scratch array to its data, or keep it in the caller's state, where the fill happens once.
-- On Linux, a Zig executable contains compiler_rt's `memset`, a loop that stores one byte at a
-  time, and that copy serves every `memset` call in the program, with glibc linked or without;
-  on macOS, libSystem's `memset` serves it. A 32 KiB `@memset` took 33,500 cycles and 100,000
-  instructions on a Neoverse N2, against 1,200 cycles on an M1.
+- On Linux, a Zig executable contains compiler_rt's `memset`, a loop that stores one byte at a time,
+  and that copy serves every `memset` call of the program's own code, C compiled into it included,
+  with glibc linked or without. The copy is hidden, so a shared library the program loads keeps
+  libc's `memset`. On macOS, libSystem's `memset` serves every call. A 32 KiB `@memset` took 33,500
+  cycles and 100,000 instructions on a Neoverse N2, against 1,200 cycles on an M1.
 - The 0xAA fill, an `@memset` that LLVM does not expand inline, and a zeroing loop that LLVM
   recognizes all become that call: a loop of 16-byte vector stores over 576 bytes compiled to the
   same `memset` call as `@memset`. On a hot path, clear with vector stores in a loop that passes
@@ -79,12 +80,13 @@ one.
   On an M1 Pro running arm64 Linux, with glibc linked, a 4 KiB fill then took 94 to 100 ns where
   compiler_rt's took 1,372 to 1,377 ns, and 32 KiB 1.2 to 1.3 µs where it took 11 to 12 µs. A
   fill of about 512 bytes or less never calls `memset`, since the compiler writes it in place.
-- The override is exported by a program: the one a project ships, and each benchmark program,
-  whose baselines' C code calls the same `memset`. The function lives once, in a module the
-  programs share, which exports nothing; each program's root, or a module only programs import,
-  holds the `comptime` block that exports it. A library exports none, since its caller's program
-  owns the symbol. The guard keeps it to Linux and to Zig 0.16, so it stops at the upgrade, which
-  deletes it:
+- The override is exported by a program: the one a project ships, and each benchmark program. A
+  baseline's C code compiled into the program calls it too. The override is hidden as compiler_rt's
+  is, so a baseline loaded as a shared library keeps libc's `memset`, already fast: each side then
+  runs a fast `memset`, though not the same one. The function lives once, in a module the programs
+  share, which exports nothing; each program's root, or a module only programs import, holds the
+  `comptime` block that exports it. A library exports none, since its caller's program owns the
+  symbol. The guard keeps it to Linux and to Zig 0.16, so it stops at the upgrade, which deletes it:
 
   ```zig
   comptime {
@@ -92,13 +94,14 @@ one.
       if (builtin.os.tag == .linux and zig_0_16) @export(&memset, .{ .name = "memset" });
   }
 
-  fn memset(dest: ?[*]u8, c: u8, len: usize) callconv(.c) ?[*]u8 {
+  fn memset(dest: ?[*]u8, value: c_int, len: usize) callconv(.c) ?[*]u8 {
       @setRuntimeSafety(false);
       const d = dest orelse return dest;
-      const fill: @Vector(32, u8) = @splat(c);
+      const byte: u8 = @truncate(@as(c_uint, @bitCast(value)));
+      const fill: @Vector(32, u8) = @splat(byte);
       if (len < 32) {
           for (0..len) |i| {
-              d[i] = c;
+              d[i] = byte;
               std.mem.doNotOptimizeAway(d);
           }
           return dest;
@@ -112,8 +115,11 @@ one.
   }
   ```
 
-  Both loops are bounded `for` loops, which an unbounded-loop lint rule passes. The barrier in each
-  keeps the compiler from turning the loop into a call to `memset`, which is this function.
+  The value is C's `int`, as C declares it, and the function stores its low byte. Both loops are
+  bounded `for` loops, which an unbounded-loop lint rule passes. Without its barrier, LLVM 21 turns
+  the short loop into a jump to this function's own entry, so the first short fill never returns;
+  the block loop's barrier keeps a later LLVM from doing the same to it. A check that disassembles
+  the override and finds no call to `memset` catches a missing barrier.
   Building the program with `-fno-builtin` is no substitute: it makes each `@memset` a byte loop
   in place, and the new `memset` is never called.
 - Assigning a struct copies all of it. Copying a fixed-capacity list whole moved 2,448 bytes and
@@ -230,7 +236,8 @@ one.
 - A Run step that inherits stdio, the default for a step with no output file, holds a global lock,
   so such steps run one at a time: three 1-second commands took 3.24 s, and 1.17 s once each
   checked its exit code with `expectExitCode(0)`. A benchmark's step keeps the lock, so no two
-  benchmarks run at once; a test's step checks its exit code.
+  benchmarks run at once; a test's step checks its exit code. A checked step that passed still
+  prints its standard error under `failed command:`, as the ` w` item below says.
 
 ## Clocks and the standard library
 
