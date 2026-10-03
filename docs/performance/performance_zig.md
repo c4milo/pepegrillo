@@ -149,6 +149,20 @@ one.
 
 ## Vector code
 
+- No loop over a length known only at run time becomes vector code. Zig 0.16 turns LLVM's loop
+  vectorizer off for Zig code, to avoid a miscompilation in LLVM 21, and `noalias` on the
+  parameters does not turn it back on. An add of one array into another, a sum, a maximum, an
+  xor, a count of one byte and a saturating subtract each stayed scalar code in both release
+  modes, on x86-64 with AVX2 and on aarch64. On an M1 Pro in ReleaseFast, `head.* -|= half` over
+  32 Ki `u16` entries took 14.6 µs as written and 0.95 µs with the vector; in an encoder that loop
+  was 8% of the time. Write the vector:
+  `chunk.* = @as(@Vector(16, u16), chunk.*) -| @as(@Vector(16, u16), @splat(half));`.
+  Zig 0.17.0 keeps the vectorizer off, and its release notes expect it back in 0.18.
+- LLVM's vectorizer of straight-line code stays on in both release modes, so a loop over a short
+  array of comptime length still becomes vector code once LLVM unrolls it. An in-place saturating
+  subtract did up to 32 entries and stayed a scalar loop at 64; a sum did up to 64. An add of one
+  such array into another stayed scalar until both parameters were `noalias`, since the two may
+  overlap.
 - `@Vector` expresses only what LLVM lowers from generic vector operations. It has no carry-less
   multiply, no CRC32 instruction and no dot product into wider lanes, and the shuffles that
   describe a pairwise sum ran slower than the scalar path. These take inline assembly with
@@ -173,9 +187,6 @@ one.
   ```
 
   Look for lane loads in a slow vector loop: `ld1.b` and `ld1.s` on aarch64, `vpinsrb` on x86-64.
-- A saturating subtract over an array stays a scalar loop in both release modes: `head.* -|= half`
-  over 32 Ki `u16` entries took 8% of an encoder's time. Write the vector:
-  `chunk.* = @as(@Vector(16, u16), chunk.*) -| @as(@Vector(16, u16), @splat(half));`.
 - x86-64 has 16 vector registers below AVX-512, and two 16-lane loops inlined into one function
   filled them: a function's stack references went from 40 to 113. Keep one vector loop per
   function there, with the rare paths out of line, and measure the shape per caller.
@@ -220,6 +231,10 @@ one.
   the trapping checks kept a C loop scalar that ReleaseFast vectorized, and doubled a C baseline's
   instruction count. Build a baseline with its own flags: `sanitize_c = .off` on its module, or
   `-fno-sanitize=all` among its C flags.
+- clang keeps its loop vectorizer for C compiled in the same build. In ReleaseFast a C baseline's
+  loop is then vector code where the same loop in Zig is scalar: the C form of the saturating
+  subtract under [Vector code](#vector-code) took 0.88 µs, against 14.6 µs for the Zig loop as
+  written. Where a baseline's loop is vector code, write the Zig vector before comparing the two.
 - Zig 0.16 builds Debug for x86-64 Linux with its own backend. It refuses `.intel_syntax`, a
   vector indexed by a lane known only at run time, and a 512-bit operand of inline assembly. Set
   `use_llvm = true` on a module that needs LLVM, and run the tests under both backends. Try an
