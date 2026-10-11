@@ -248,6 +248,14 @@ one.
   with the commit from `git ls-remote <repo> 'refs/tags/<tag>^{}'`, and check the hash it records.
 - `.zig-cache` keeps every build and removes nothing. Builds across many option sets, a CPU or a
   mutation each, filled 51 GB. Cap it in CI, and clear it after a sweep.
+- Two source trees that share one `--cache-dir` are handed each other's binaries. A cache entry
+  names the root file by its path relative to the working directory and every file by the absolute
+  path of the tree that compiled it first. A second tree whose root file has the same bytes
+  matches that entry, and the check for changes reads the first tree's files. Two trees with one
+  root file and different imports ran the first tree's tests from the second: 2 passed, where the
+  second tree's own cache ran its 3 and failed one. A mutation verdict from such a tree is false
+  either way. Give each tree, worktrees included, its own cache, and each side of a paired
+  measurement its own.
 - A Run step that inherits stdio, the default for a step with no output file, holds a global lock,
   so such steps run one at a time: three 1-second commands took 3.24 s, and 1.17 s once each
   checked its exit code with `expectExitCode(0)`. A benchmark's step keeps the lock, so no two
