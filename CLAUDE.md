@@ -54,7 +54,10 @@ keeps reproducing them across pepegrillo versions.
 - Operational errors — an unreadable file, a malformed argument, a limit reached — return error
   values. Assertions are for programmer error.
 - Write prose in active voice with plain words: short sentences with one idea each, terms defined
-  before use, and no metaphors. Name what literally happens.
+  before use, and no metaphors. Name what literally happens. Write it in ASD-STE100 Simplified
+  Technical English too: descriptive sentences of 25 words or fewer and procedural ones of 20 or
+  fewer, one topic in each sentence, simple tenses, one word for one meaning, no -ing form used as
+  a noun or a modifier, and no noun cluster of more than three words.
 - Every Markdown file is GitHub-flavored and renders on GitHub as written: real list markers,
   pipes inside a table cell escaped as `\|`, fenced code blocks with a language.
 
