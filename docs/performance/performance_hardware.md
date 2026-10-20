@@ -1,87 +1,102 @@
 # 4. Build it with the hardware in mind
 
-Step 4 of the method in [performance.md](performance.md): the rules for writing a change so the
-hardware runs it well.
+This is step 4 of the method in [performance.md](performance.md). It gives the rules to write a
+change that the hardware runs well.
 
 **Registers.**
 
-- A loop's state lives in the locals of a function of its own, out of line, with the rare paths in
-  other functions, so the compiler keeps the hot registers for the loop. The locals take the
-  register's width.
-- Any function that takes the loop's address is inline. An out-of-line callee that takes it puts
-  the whole loop in memory for the frame's life.
-- Read the loop's disassembly. A load or store through the stack pointer inside it is a spill. A
-  load or store through the state's pointer is a reload the compiler kept because a store might
-  change the state ([the loop's state](performance_zig.md#the-loops-state)).
-- In assembly, allot every register and write the plan in the file's header; pack what does not
-  fit; spill what a phase does not need to the loop's struct, once per phase.
+- Keep the state of a loop in the locals of a separate function, out of line. Put the rare paths in
+  other functions. The compiler then keeps the hot registers for the loop. The locals take the
+  width of a register.
+- Make inline every function that takes the address of the loop. An out-of-line callee that takes
+  it puts the whole loop in memory for the life of the frame.
+- Read the disassembly of the loop:
+  - A load or a store through the stack pointer inside the loop is a spill.
+  - A load or a store through the pointer to the state is a reload. The compiler kept it because a
+    store can change the state ([the loop's state](performance_zig.md#the-loops-state)).
+- In assembly, give each register a job, and write the plan in the header of the file. Pack what
+  does not fit. Spill to the loop's struct what a phase does not need, once per phase.
 
 **Branches.**
 
-- Fold two checks into one branch where the hardware offers it.
-- Select instead of branching for a minimum or a choice when the branch is hard to predict. A
-  predicted branch costs less, since a select waits for its condition and for both inputs.
+- Fold two checks into one branch where the hardware can do it.
+- Use a select, not a branch, for a minimum or a choice when the branch is hard to predict. A
+  predicted branch costs less, because a select waits for its condition and for both inputs.
   `@branchHint(.unpredictable)` asks the compiler for the select.
-- Keep data-dependent branches few and stable within an input; a mispredict costs what the
-  appendix's table says, and a narrow core pays more.
-- The common path falls through. In assembly, a refill, a second-level lookup or a rare case goes
-  in a block after the loop, entered by a branch left untaken and ending in a branch back to the
-  loop, as the compiler places cold blocks. A loop with the compiler's instructions and one more
-  taken branch per unit ran 2.4% slower on a Neoverse N2, where an M1 Pro ran it 6% faster.
-- Outside assembly, Zig aligns a function, not a loop inside it. `align(64)` on a hot function,
-  and on each kernel of an object whose text is 16-byte aligned, keeps its loops where its own code
-  puts them, whatever changes before it. In assembly, align a loop's top to a fetch line only where
-  the judge shows the gain: placement alone moves a result either way, by 21 to 38% on one x86-64
-  core ([step 1](performance.md#1-measure-the-gap-first)).
+- Keep few branches that depend on the data, and keep them stable within an input. A mispredict
+  costs what the table in the appendix says. A narrow core pays more.
+- Let the common path fall through. In assembly, put a refill, a second-level lookup or a rare case
+  in a block after the loop.
+  - A branch that is not taken goes to the block. The block ends with a branch back to the loop.
+    This is how the compiler places cold blocks.
+  - A loop with the compiler's instructions and one more taken branch per unit ran 2.4% slower on a
+    Neoverse N2. An M1 Pro ran it 6% faster.
+- Outside assembly, Zig aligns a function, not a loop in it.
+  - Put `align(64)` on a hot function. Put it also on each kernel of an object whose text has a
+    16-byte alignment. The loops then stay where the function's own code puts them, whatever
+    changes before it.
+  - In assembly, align the top of a loop to a fetch line only where the judge shows the gain.
+    Placement alone moves a result in either direction: by 21 to 38% on one x86-64 core
+    ([step 1](performance.md#1-measure-the-gap-first)).
 
 **Memory.**
 
-- Tables that fit the first-level cache, entries of the smallest integer that holds the value, a
-  pointer array in place of a multiply for a table's address, an indexed array in place of a
-  pointer chain ([#83](https://abseil.io/fast/83)).
-- The fields one loop touches sit together, hot scalars before tables; no two threads write one
-  line.
-- Sequential streams belong to the hardware prefetcher; a reference far back into history misses,
-  at a cost the format dictates. A software prefetch that gains on the filter can measure flat on
-  the judge, whose caches differ, so the judge decides it.
-- A copy moves chunks of a vector register and overruns into room a margin holds, in place of an
-  exact loop; where a copy overlaps its source, move a width the distance holds, so no load waits
-  on the store before it.
-- Unaligned loads of a word, or of a 16- or 32-byte vector, cost nothing to speak of. A 64-byte
-  load across a cache line does: a 64-lane loop ran at a third of its speed on one x86-64 core,
-  a third slower on another. Start such a loop on a line, after one unaligned block, and time it
-  at several offsets from a line, since a buffer sits where its allocator put it. Aligning a table
-  costs padding inside a named limit, so it is priced and asked for first.
-- No per-unit work across a caller's boundary: one call takes everything the buffers hold.
+- Use tables that fit the first-level cache ([#83](https://abseil.io/fast/83)):
+  - Entries of the smallest integer that holds the value.
+  - A pointer array, not a multiply, for the address of a table.
+  - An indexed array, not a chain of pointers.
+- Put together the fields that one loop touches, hot scalars before tables. Do not let two threads
+  write one line.
+- The hardware prefetcher handles sequential streams. A reference far back into history misses, at
+  a cost that the format sets. A software prefetch that gains on the filter can measure flat on the
+  judge, which has different caches. The judge decides.
+- Make a copy move chunks of a vector register, and let it write past its end into room that a
+  margin holds. Do not use an exact loop. Where a copy overlaps its source, move a width that the
+  distance holds. Then no load waits on the store before it.
+- An unaligned load of a word, or of a 16- or 32-byte vector, costs almost nothing. A 64-byte load
+  across a cache line costs much more.
+  - A 64-lane loop ran at a third of its speed on one x86-64 core, and a third slower on another.
+  - Start such a loop on a line, after one unaligned block.
+  - Time the loop at several offsets from a line, because a buffer is where its allocator put it.
+  - An aligned table costs padding inside a named limit. Price it, and ask for it first.
+- Do no work per unit across the boundary of a caller. One call takes everything that the buffers
+  hold.
 
 **Vectors.**
 
-- Keep a verdict in the vector registers across a group of blocks, and move it to a general
-  register once per group. Each move costs, and a narrow core pays more for it.
-- A compare's bit mask is one instruction on x86-64 and several on aarch64, which has no such
-  instruction. A path built on the mask proves its speed on aarch64 too.
-- A call inside a vector loop spills every live vector register: x86-64's System V ABI keeps none
-  across a call, and aarch64 keeps only the low 64 bits of v8 to v15.
-- A wider vector can lose, and one instruction can cost five times as much on one vendor's cores
-  as on another's that report the same features. Choose a width and an instruction per CPU, from
-  measurements on that CPU. A pass that stops at the first byte of interest rescans the block at
-  each stop and lost 37% at 64 bytes, where a validator, with no stop, gained 1.4 times from 32
-  lanes to 64. On an M1 Pro, a scan a word at a time sped 18-digit runs 14% and slowed one-digit
-  runs 41%: measure the lengths the inputs hold before widening a scan.
+- Keep a verdict in the vector registers across a group of blocks. Move it to a general register
+  once per group. Each move costs, and a narrow core pays more for it.
+- The bit mask of a compare is one instruction on x86-64. On aarch64 it is several instructions,
+  because aarch64 has no such instruction. A path that uses the mask must prove its speed on aarch64
+  too.
+- A call inside a vector loop spills every live vector register. The System V ABI of x86-64 keeps
+  none across a call. aarch64 keeps only the low 64 bits of v8 to v15.
+- A wider vector can lose. One instruction can cost five times as much on the cores of one vendor
+  as on the cores of another that report the same features.
+  - Choose a width and an instruction per CPU, from measurements on that CPU.
+  - A pass that stops at the first byte of interest scans the block again at each stop. It lost 37%
+    at 64 bytes. A validator does not stop, and it gained 1.4 times from 32 lanes to 64.
+  - On an M1 Pro, a scan of one word at a time made 18-digit runs 14% faster and one-digit runs 41%
+    slower. Measure the lengths in the inputs before you make a scan wider.
 
-**Batching.**
+**Batches.**
 
-- One pass of a loop takes as many units as its margins allow; units go in runs with one
-  bookkeeping per run; a refill loads a word at a time; a copy stores its first chunks before it
-  looks at its length; a lookup goes out before the refill it can overlap
-  ([hints](https://abseil.io/fast/hints.html)).
-- A latency chain shortens only with fewer dependent steps or two chains overlapped; fewer
+- Make one pass of a loop take as many units as its margins allow
+  ([hints](https://abseil.io/fast/hints.html)):
+  - Put units in runs, with one bookkeeping step per run.
+  - Make a refill load one word at a time.
+  - Make a copy store its first chunks before it looks at its length.
+  - Start a lookup before the refill that it can overlap.
+- Only fewer dependent steps, or two chains that overlap, make a latency chain shorter. Fewer
   instructions do nothing for it.
-- A shorter loop is a guess until a paired run shows the gain. Stepping one index over counted
-  blocks cut a 16-byte loop from 24 instructions to 16, and llvm-mca predicted 15% fewer cycles
-  on a Neoverse N2; there, two paired runs measured it 2 to 9% slower over text strings.
+- A shorter loop is a guess until a paired run shows the gain. One index that stepped over counted
+  blocks cut a 16-byte loop from 24 instructions to 16. llvm-mca predicted 15% fewer cycles on a
+  Neoverse N2. There, two paired runs measured it 2 to 9% slower over text strings.
 
-**Seeing what a profile cannot.** `llvm-mca` over a loop's text gives its dependency chains and
-its throughput per iteration ([#99](https://abseil.io/fast/99)); it assumes every load hits the
-first-level cache, and it knows only the cores LLVM models. Hardware counters give cycles,
-instructions and mispredicts per unit beside the baseline's.
+**What a profile cannot see.**
+
+- `llvm-mca` over the text of a loop gives its dependency chains and its throughput per iteration
+  ([#99](https://abseil.io/fast/99)). It assumes that every load hits the first-level cache. It
+  knows only the cores that LLVM models.
+- Hardware counters give cycles, instructions and mispredicts per unit, beside the counts of the
+  baseline.
