@@ -1,7 +1,7 @@
 # pepegrillo
 
 pepegrillo is the developer tooling a Zig 0.16 project runs from its build to hold its tree to its
-own rules. It has six tools:
+own rules. It has seven tools:
 
 - **lint**: a driver that walks the tree and runs rules over Zig and Markdown files, and generic
   rules a project configures: `forbidden_references`, `file_length`, `magic_numbers`,
@@ -17,6 +17,8 @@ own rules. It has six tools:
 - **instructions**: counts a project's benchmark cases under cachegrind, and fails a case whose
   instructions per operation moved past the project's threshold from a baseline the project
   commits.
+- **checkfree**: counts the safety check sites each exported function reaches in the assembly of a
+  ReleaseSafe build, and fails a count that differs from the table the project commits.
 
 A project states its settings in its own tool entry points. pepegrillo holds the engines and names
 no project.
@@ -225,6 +227,46 @@ bench/instructions.zon:8:12: error: [instructions] cache_hit grew to 160.2 instr
 A baseline counted by another counter, Zig release or target is not compared; it is written anew.
 The tool needs valgrind, which runs on Linux: `apt-get install valgrind` on a GitHub runner.
 Anywhere else it reports that it cannot count, and exits 2.
+
+## Check sites
+
+A ReleaseSafe build keeps Zig's safety checks, and a check inside a vector loop can stop the loop
+from staying vector. The `checkfree` tool counts, for each exported function whose name starts with
+a project's prefix, the calls and branches to a panic function in it and in every function it
+reaches. A failed assertion, `reachedUnreachable`, is not counted. The project pins each count in a
+table, and the tool fails when a count differs from its pin, so a change that adds a check or
+removes one changes the table in the same commit.
+
+```zig
+// tools/checkfree.zig
+const std = @import("std");
+const pepegrillo = @import("pepegrillo");
+const sites = @import("checkfree_sites.zig");
+
+pub fn main(init: std.process.Init) !void {
+    return pepegrillo.checkfree.main(init, .{
+        .prefix = "lib_",
+        .table = "tools/checkfree_sites.zig",
+        .pins = &sites.pins,
+    });
+}
+```
+
+The project's build emits the assembly of the objects it names and passes each file:
+
+```zig
+const object = b.addObject(.{ .name = "kernels", .root_module = kernels, .use_llvm = true });
+const check = b.addRunArtifact(checkfree);
+check.addFileArg(object.getEmittedAsm());
+b.step("checkfree-check", "Hold the kernels to their check sites").dependOn(&check.step);
+```
+
+Build the objects ReleaseSafe for a named target, so every host gives the same counts. `zig build
+checkfree-check -- --record` prints the table the files give. A finding names the table:
+
+```text
+tools/checkfree_sites.zig: error: [checkfree] lib_crc32_avx2 reaches 6 check sites; the table pins 5
+```
 
 ## Try an unpushed change
 

@@ -3,8 +3,9 @@
 pepegrillo is the developer tooling a Zig 0.16 project runs from its build to hold its tree to its
 own rules. It holds a lint engine with generic rules a project configures, a cognitive-complexity
 scorer, a commit-message linter, a runner for TLA+ models under TLC, a runner for Lean proofs under
-lake, and a check that holds benchmark cases to the instructions each operation takes, counted
-under cachegrind. Home: github.com/c4milo/pepegrillo.
+lake, a check that holds benchmark cases to the instructions each operation takes, counted under
+cachegrind, and a check that holds exported functions to the safety check sites they reach. Home:
+github.com/c4milo/pepegrillo.
 
 ## What pepegrillo is
 
@@ -71,7 +72,7 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 
 - A Conventional Commit: `type(scope)!: description`. The type is one of `feat`, `fix`, `docs`,
   `test`, `refactor`, `perf`, `build`, `ci`, `chore`. The scopes are `lint`, `complexity`,
-  `commit`, `tla`, `lean`, `instructions`, `hooks` and `build`.
+  `commit`, `tla`, `lean`, `instructions`, `checkfree`, `hooks` and `build`.
 - The description is imperative, starts with a lowercase letter, has no final period, and the
   subject line stays at or under 72 columns.
 - One blank line after the subject. A body line stays at or under 100 columns, and the body stays
@@ -81,7 +82,7 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 ## Layout
 
 - `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`, `tla`,
-  `lean`, `instructions`, and `report_line`, the finding line every tool prints.
+  `lean`, `instructions`, `checkfree`, and `report_line`, the finding line every tool prints.
 - `src/lint/` is the engine: `driver.zig`, `report.zig`, `scope.zig`, `paths.zig`, `text.zig`,
   `ast.zig`, `ast_read.zig`, `ast_scan.zig`, `names.zig`, `harness.zig`. `src/lint/rules/` holds
   the generic rules.
@@ -93,6 +94,8 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 - `src/instructions/` counts a project's benchmark cases: `instructions.zig` the tool,
   `instructions_measure.zig` a cost from three runs and its verdict, `instructions_baseline.zig`
   the file of counts a project commits, `instructions_cachegrind.zig` the counter.
+- `src/checkfree/` counts the safety check sites of a project's exported functions:
+  `checkfree.zig` the tool, `checkfree_assembly.zig` the reader of LLVM's assembly and the count.
 - `hooks/pre-push` is the git hook a project installs.
 - `docs/` holds what the projects share in prose: `performance/`, the method, split by the file rule
   above with `performance.md` as its entry point. It ships in the package, so a project's build
