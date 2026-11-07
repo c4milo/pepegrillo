@@ -61,11 +61,11 @@ fn is_flag(argument: []const u8) bool {
 /// retired, or why it retired none.
 pub fn run_counted(context: *const Context, comptime project: Config, counter: anytype, invocation: *const Invocation) !u8 {
     const environment: baseline.Environment = .{ .counter = counter.label, .zig = builtin.zig_version_string, .target = target_name };
-    if (invocation.rewrite) return rewrite(context, project, counter, invocation, environment);
-    return check(context, project, counter, invocation, environment);
+    if (invocation.rewrite) return rewrite(context, project, counter, invocation, &environment);
+    return check(context, project, counter, invocation, &environment);
 }
 
-fn check(context: *const Context, comptime project: Config, counter: anytype, invocation: *const Invocation, environment: baseline.Environment) !u8 {
+fn check(context: *const Context, comptime project: Config, counter: anytype, invocation: *const Invocation, environment: *const baseline.Environment) !u8 {
     const whole: report_line.Location = .{ .source = invocation.baseline };
     const file, const source = switch (try baseline.read(context.arena, context.io, invocation.baseline)) {
         .baseline => |found| .{ found.file, found.source },
@@ -79,7 +79,7 @@ fn check(context: *const Context, comptime project: Config, counter: anytype, in
         },
     };
     const recorded = file.environment();
-    if (!recorded.eql(&environment)) {
+    if (!recorded.eql(environment)) {
         try report_line.write(context.errors, &whole, .@"error", rule, "was counted by {s} under Zig {s} on {s}, and this run counts by {s} under Zig {s} on {s}: write it anew with {s}", .{
             file.counter, file.zig, file.target, environment.counter, environment.zig, environment.target, rewrite_flag,
         });
@@ -209,7 +209,7 @@ fn named(comptime project: Config, name: []const u8) bool {
 }
 
 /// Counts every case and writes the baseline, unless a case could not be counted.
-fn rewrite(context: *const Context, comptime project: Config, counter: anytype, invocation: *const Invocation, environment: baseline.Environment) !u8 {
+fn rewrite(context: *const Context, comptime project: Config, counter: anytype, invocation: *const Invocation, environment: *const baseline.Environment) !u8 {
     var entries: std.ArrayList(baseline.Entry) = .empty;
     for (project.cases) |case| {
         if (try rewritten(context, project, counter, invocation, case)) |entry| try entries.append(context.arena, entry);

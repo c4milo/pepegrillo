@@ -57,7 +57,7 @@ pub const Entry = struct {
     rounds: u64,
     instructions: u64,
 
-    pub fn measurement(self: Entry) measure.Measurement {
+    pub fn measurement(self: *const Entry) measure.Measurement {
         return .{ .rounds = self.rounds, .instructions = self.instructions };
     }
 };
@@ -69,11 +69,11 @@ pub const File = struct {
     target: []const u8,
     cases: []const Entry,
 
-    pub fn environment(self: File) Environment {
+    pub fn environment(self: *const File) Environment {
         return .{ .counter = self.counter, .zig = self.zig, .target = self.target };
     }
 
-    pub fn entry(self: File, name: []const u8) ?Entry {
+    pub fn entry(self: *const File, name: []const u8) ?Entry {
         for (self.cases) |candidate| {
             if (std.mem.eql(u8, candidate.name, name)) return candidate;
         }
@@ -159,7 +159,7 @@ pub fn position_of(source: []const u8, name: []const u8) ?report_line.Position {
 }
 
 /// The text of a baseline holding `entries`, counted under `environment`.
-pub fn render(arena: Allocator, environment: Environment, entries: []const Entry) ![]const u8 {
+pub fn render(arena: Allocator, environment: *const Environment, entries: []const Entry) ![]const u8 {
     var text: Io.Writer.Allocating = .init(arena);
     const out = &text.writer;
     try out.writeAll(header_comment);
@@ -206,7 +206,7 @@ test "render writes a baseline that read gives back, with each case's position" 
         .{ .name = "cache_hit", .rounds = 1000, .instructions = 153_000 },
         .{ .name = "query-build", .rounds = 250, .instructions = 1_234_567 },
     };
-    const text = try render(arena, environment_fixture, &entries);
+    const text = try render(arena, &environment_fixture, &entries);
     const result = try read_text(arena, &tmp, text);
     const file = result.baseline.file;
     try testing.expect(file.environment().eql(&environment_fixture));
@@ -245,12 +245,12 @@ test "read refuses zero rounds, rounds past the limit, no instructions and a cas
         }, .reason = "case a is counted twice" },
     };
     for (faults) |fault| {
-        const result = try read_text(arena, &tmp, try render(arena, environment_fixture, fault.entries));
+        const result = try read_text(arena, &tmp, try render(arena, &environment_fixture, fault.entries));
         try testing.expect(std.mem.startsWith(u8, result.malformed.message, fault.reason));
         try testing.expectEqual(8, result.malformed.position.?.line);
     }
     const at_limit = [_]Entry{.{ .name = "a", .rounds = rounds_max, .instructions = 5 }};
-    try testing.expect(try read_text(arena, &tmp, try render(arena, environment_fixture, &at_limit)) == .baseline);
+    try testing.expect(try read_text(arena, &tmp, try render(arena, &environment_fixture, &at_limit)) == .baseline);
 }
 
 test "Environment.eql compares the counter, the Zig release and the target" {
