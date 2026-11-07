@@ -291,6 +291,9 @@ tools/checkfree_sites.zig: error: [checkfree] lib_crc32_avx2 reaches 6 check sit
 - [`docs/api.md`](docs/api.md) holds the rules for a public API: TigerStyle first, then the idioms
   of Zig 0.16's standard library, then a project decision that names its reason.
 
+[`docs/migrate.md`](docs/migrate.md) lists each name and signature that the API change of
+2026-11-07 renamed or changed, so that a project moves in one pass.
+
 A project's build adds the `guide` step with `add_guide_step` from pepegrillo's `build.zig`. The
 step installs both guides, at the commit the project pins, to `zig-out/docs/`: the method to
 `performance/` and the API guide to `api.md`. A guide that pepegrillo adds later joins the step

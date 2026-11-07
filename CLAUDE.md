@@ -112,6 +112,8 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
     point. `docs/performance.md` points to the folder until every project installs the folder.
   - `api.md` is the guide to a public API: TigerStyle first, then Zig 0.16's std idioms, then a
     project decision that names its reason.
+  - `migrate.md` lists each old name and signature of a breaking API change beside the new one,
+    so that the projects move in one pass. A breaking change adds its names there.
 - `tools/` holds pepegrillo's own configured entry points, which run pepegrillo over itself.
 
 ## Commands
