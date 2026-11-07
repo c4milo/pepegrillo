@@ -14,7 +14,7 @@
 //! used`. It reports none when:
 //!
 //! 1. The array's length is a number, not a name, of at most `literal_elements_max`: a few stores.
-//! 2. The declaration shows the array's size, and it is under `bytes_min`: a length written as a
+//! 2. The declaration shows the array's size, and it is under `fill_len_min`: a length written as a
 //!    number, or as a name the file sets to one number, times an element of a primitive type such
 //!    as `u8`, `u32` or `f64`.
 //! 3. `allowed` names the file and the variable: a path that runs once or rarely, which the project
@@ -32,11 +32,11 @@ const Scope = @import("../scope.zig").Scope;
 
 /// The most elements an array whose length is a number may have and not be reported, unless the
 /// project says otherwise: eight stores or so.
-pub const literal_elements_default: u64 = 8;
+pub const literal_elements_max_default: u64 = 8;
 
 /// The size under which an array whose size its declaration shows is not reported, unless the
 /// project says otherwise: a cache line, which a few stores fill.
-pub const bytes_min_default: u64 = 64;
+pub const fill_len_min_default: u64 = 64;
 
 /// The bytes the rule takes a `usize` or an `isize` to hold: a 64-bit target's, the larger, so a
 /// 32-bit build never passes an array a 64-bit build would report.
@@ -54,10 +54,10 @@ pub const Config = struct {
     /// The files the rule reads.
     scope: Scope,
     /// The most elements an array whose length is a number may have and not be reported.
-    literal_elements_max: u64 = literal_elements_default,
+    literal_elements_max: u64 = literal_elements_max_default,
     /// The size an array whose size its declaration shows must reach to be reported. 0 turns the
     /// exemption off.
-    bytes_min: u64 = bytes_min_default,
+    fill_len_min: u64 = fill_len_min_default,
     /// The variables on a path that runs once or rarely, which the rule does not report.
     allowed: []const Allowed = &.{},
     /// Stop reading a file at its `const testing = std.testing;`, for a project whose files put
@@ -161,14 +161,14 @@ const Visitor = struct {
         return elements <= self.settings.literal_elements_max;
     }
 
-    /// True when the declaration shows the array's size and it is under `bytes_min`.
+    /// True when the declaration shows the array's size and it is under `fill_len_min`.
     fn small_bytes(self: *const Visitor, array: Ast.full.ArrayType) bool {
         const elements = self.shown_length(array.ast.elem_count) orelse return false;
         const element_bytes = primitive_bytes(self.tree.getNodeSource(array.ast.elem_type)) orelse return false;
         const sentinel: u64 = @intFromBool(array.ast.sentinel.unwrap() != null);
         const count = std.math.add(u64, elements, sentinel) catch return false;
         const bytes = std.math.mul(u64, count, element_bytes) catch return false;
-        return bytes < self.settings.bytes_min;
+        return bytes < self.settings.fill_len_min;
     }
 
     /// The array's length when it is a number, or a name the file sets to exactly one number.

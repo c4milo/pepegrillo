@@ -82,6 +82,9 @@ A limit puts its qualifier last, and pepegrillo's unit for a size in bytes is `_
 | `lint.rules.magic_numbers.default_largest_allowed_literal` | `literal_max_default` |
 | `lint.rules.relative_import.max_resolved_segments` | `resolved_segments_max` |
 | `lint.rules.static_alignment.max_type_depth` | `type_depth_max` |
+| `lint.rules.undefined_fill.literal_elements_default` | `literal_elements_max_default` |
+| `lint.rules.undefined_fill.Config.bytes_min` | `fill_len_min` |
+| `lint.rules.undefined_fill.bytes_min_default` | `fill_len_min_default` |
 | `lint.rules.unreleased_acquire.default_release_prefixes` | `release_prefixes_default` |
 | `lint.rules.unreleased_acquire.default_release_suffixes` | `release_suffixes_default` |
 | `lint.rules.unreleased_acquire.max_registered_defers` | `registered_defers_max` |

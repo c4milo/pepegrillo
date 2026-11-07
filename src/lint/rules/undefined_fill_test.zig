@@ -67,7 +67,7 @@ test "undefined-fill passes a few elements written as a number, and reports one 
         \\    _ = .{ &events, &hex };
         \\}
     , &.{ "var events " ++ message, "var hex " ++ message });
-    const strict: Config = .{ .scope = everywhere.scope, .literal_elements_max = 0, .bytes_min = 0 };
+    const strict: Config = .{ .scope = everywhere.scope, .literal_elements_max = 0, .fill_len_min = 0 };
     try expect_findings(strict, "src/store/page.zig",
         \\fn one() void {
         \\    var event: [1]u64 = undefined;
@@ -197,7 +197,7 @@ test "undefined-fill passes an array its declaration shows under 64 bytes, and r
         "var name " ++ message, "var line " ++ message,  "var digest " ++ message, "var halves " ++ message,
         "var sums " ++ message, "var words " ++ message, "var sizes " ++ message,  "var halfs " ++ message,
     });
-    const sizeless: Config = .{ .scope = everywhere.scope, .bytes_min = 0 };
+    const sizeless: Config = .{ .scope = everywhere.scope, .fill_len_min = 0 };
     try expect_findings(sizeless, "src/store/page.zig",
         \\fn small() void {
         \\    var name: [16]u8 = undefined;
