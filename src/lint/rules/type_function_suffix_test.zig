@@ -61,6 +61,17 @@ test "type-function-suffix reads a type function inside a container and inside a
     , &.{ message("PageOf", "Page"), message("QueueOf", "Queue") });
 }
 
+test "type-function-suffix reads a return type in parentheses" {
+    try expect_findings(everywhere, "src/store/proof.zig",
+        \\pub fn ProofOf(comptime T: type) (type) {
+        \\    return struct { item: T };
+        \\}
+        \\pub fn CheckOf(comptime T: type) ((type)) {
+        \\    return struct { item: T };
+        \\}
+    , &.{ message("ProofOf", "Proof"), message("CheckOf", "Check") });
+}
+
 test "type-function-suffix passes a private one, a value function, a bare suffix, another name" {
     try expect_findings(everywhere, "src/store/page.zig",
         \\fn RingOf(comptime capacity: u32) type {

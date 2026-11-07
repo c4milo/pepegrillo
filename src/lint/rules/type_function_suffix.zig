@@ -8,8 +8,8 @@
 //! Over every Zig file in `scope`, the rule reads each function declared as a member of a
 //! container: the file's top level, or a `struct`, `union`, `enum` or `opaque`, including one
 //! declared inside a function. It reports a function that is `pub`, whose return type is the
-//! identifier `type`, and whose name ends with one of `suffixes` and is longer than it. The
-//! message is `pub fn <name> returns a type: name it <stem>, for the thing it returns, as std
+//! identifier `type`, in parentheses or not, and whose name ends with one of `suffixes` and is
+//! longer than it. The message is `pub fn <name> returns a type: name it <stem>, for the thing it returns, as std
 //! names ArrayList and StaticBitSet`, where `<stem>` is the name without the suffix.
 //!
 //! The rule reads syntax. It does not see a return type written as an alias of `type`, nor a type
@@ -107,9 +107,15 @@ const Visitor = struct {
 fn public_type_function(tree: *const Ast, member: Node.Index) ?Ast.TokenIndex {
     var buffer: [1]Node.Index = undefined;
     const prototype = tree.fullFnProto(&buffer, member) orelse return null;
-    const visibility = prototype.visib_token orelse return null;
-    if (tree.tokenTag(visibility) != .keyword_pub) return null;
-    const return_type = prototype.ast.return_type.unwrap() orelse return null;
+    // Zig has one visibility keyword, `pub`.
+    _ = prototype.visib_token orelse return null;
+    var return_type = prototype.ast.return_type.unwrap() orelse return null;
+    // A return type in parentheses, `(type)`, is the same type.
+    var removed: usize = 0;
+    while (tree.nodeTag(return_type) == .grouped_expression) : (removed += 1) {
+        std.debug.assert(removed < ast.max_tree_depth);
+        return_type = tree.nodeData(return_type).node_and_token[0];
+    }
     if (tree.nodeTag(return_type) != .identifier) return null;
     if (!std.mem.eql(u8, tree.tokenSlice(tree.nodeMainToken(return_type)), "type")) return null;
     return prototype.name_token;
