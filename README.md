@@ -269,6 +269,15 @@ checkfree-check -- --record` prints the table the files give. A finding names th
 tools/checkfree_sites.zig: error: [checkfree] lib_crc32_avx2 reaches 6 check sites; the table pins 5
 ```
 
+## Guides
+
+`docs/` holds the guides that every project that uses pepegrillo shares. The package ships them.
+
+- [`docs/performance/`](docs/performance/performance.md) holds the method for each performance
+  change.
+- [`docs/api.md`](docs/api.md) holds the rules for a public API: TigerStyle first, then the idioms
+  of Zig 0.16's standard library, then a project decision that names its reason.
+
 ## Try an unpushed change
 
 `zig build --fork=<path to a pepegrillo checkout>` builds the project against that checkout in
