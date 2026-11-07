@@ -291,6 +291,18 @@ tools/checkfree_sites.zig: error: [checkfree] lib_crc32_avx2 reaches 6 check sit
 - [`docs/api.md`](docs/api.md) holds the rules for a public API: TigerStyle first, then the idioms
   of Zig 0.16's standard library, then a project decision that names its reason.
 
+A project's build adds the `guide` step with `add_guide_step` from pepegrillo's `build.zig`. The
+step installs both guides, at the commit the project pins, to `zig-out/docs/`: the method to
+`performance/` and the API guide to `api.md`. A guide that pepegrillo adds later joins the step
+with no change in the project.
+
+```zig
+// build.zig
+const pepegrillo = b.lazyDependency("pepegrillo", .{}) orelse return;
+const pepegrillo_build = b.lazyImport(@This(), "pepegrillo") orelse return;
+pepegrillo_build.add_guide_step(b, pepegrillo);
+```
+
 ## Try an unpushed change
 
 `zig build --fork=<path to a pepegrillo checkout>` builds the project against that checkout in

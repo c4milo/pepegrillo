@@ -5,8 +5,10 @@
 //! Built as the root, it runs pepegrillo over itself: `zig build lint` scores cognitive
 //! complexity and runs the lint rules of tools/lint.zig, `zig build test` runs the lint, every
 //! unit test and the format check, `zig build lint-commits` checks the commit messages this branch
-//! adds, and `zig build hooks` points this clone's core.hooksPath at hooks/. There are no
-//! dependencies.
+//! adds, `zig build hooks` points this clone's core.hooksPath at hooks/, and `zig build guide`
+//! installs the guides as a project's build does. There are no dependencies.
+//!
+//! A project's build adds its `guide` step with `add_guide_step` (README.md, Guides).
 const std = @import("std");
 
 /// CLAUDE.md, Conventions: the cognitive-complexity threshold. Never raised: a function over it is
@@ -31,6 +33,16 @@ const commit_lint_range = "origin/main..HEAD";
 
 /// The directory `zig build hooks` points this clone's core.hooksPath at.
 const hooks_directory = "hooks";
+
+/// Where `zig build guide` installs the guides, under the install prefix.
+const guide_directory = "docs";
+
+/// The guides every project that uses pepegrillo shares, from `docs/` in this tree to the same
+/// path under `guide_directory`: a directory or one file.
+const guides = [_]struct { path: []const u8, kind: enum { directory, file } }{
+    .{ .path = "performance", .kind = .directory },
+    .{ .path = "api.md", .kind = .file },
+};
 
 pub fn build(b: *std.Build) void {
     const module = b.addModule("pepegrillo", .{
@@ -60,6 +72,45 @@ pub fn build(b: *std.Build) void {
 
     add_commit_lint_steps(b, module);
     add_hooks_step(b);
+    test_step.dependOn(add_guide_check(b, add_guide_step_from(b, b.path(guide_directory))));
+}
+
+/// `zig build guide` in a project: installs pepegrillo's guides, at the commit the project pins,
+/// to `zig-out/docs/`: the performance method to `performance/`, whose entry point is
+/// `performance.md`, and the API guide to `api.md`. A project calls it from its `build.zig`
+/// with the dependency it holds pepegrillo by.
+pub fn add_guide_step(b: *std.Build, pepegrillo: *std.Build.Dependency) void {
+    _ = add_guide_step_from(b, pepegrillo.path(guide_directory));
+}
+
+/// The `guide` step over the guides in `docs`. Returns the directory it installs, which the
+/// check reads.
+fn add_guide_step_from(b: *std.Build, docs: std.Build.LazyPath) std.Build.LazyPath {
+    const copied = b.addWriteFiles();
+    for (guides) |guide| switch (guide.kind) {
+        .directory => _ = copied.addCopyDirectory(docs.path(b, guide.path), guide.path, .{}),
+        .file => _ = copied.addCopyFile(docs.path(b, guide.path), guide.path),
+    };
+    const install = b.addInstallDirectory(.{
+        .source_dir = copied.getDirectory(),
+        .install_dir = .prefix,
+        .install_subdir = guide_directory,
+    });
+    const step = b.step("guide", "Install pepegrillo's guides to zig-out/" ++ guide_directory);
+    step.dependOn(&install.step);
+    return copied.getDirectory();
+}
+
+/// Checks that the guide step installs the entry point of each guide.
+fn add_guide_check(b: *std.Build, installed: std.Build.LazyPath) *std.Build.Step {
+    const step = b.step("guide-check", "Check the guide step installs each guide");
+    const performance = b.addCheckFile(installed.path(b, "performance/performance.md"), .{
+        .expected_matches = &.{"# Performance work"},
+    });
+    const api = b.addCheckFile(installed.path(b, "api.md"), .{ .expected_matches = &.{"# Public API"} });
+    step.dependOn(&performance.step);
+    step.dependOn(&api.step);
+    return step;
 }
 
 /// A module compiled for the build host in Debug that imports `pepegrillo`: every tool entry point.
