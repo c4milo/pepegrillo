@@ -31,6 +31,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const report_line = @import("../report_line.zig");
+const Context = @import("../context.zig").Context;
 
 const assembly = @import("checkfree_assembly.zig");
 
@@ -83,14 +84,18 @@ pub fn main(init: std.process.Init, comptime project: Config) !void {
     var error_buffer: [output_buffer_len]u8 = undefined;
     var out = Io.File.stdout().writerStreaming(init.io, &output_buffer);
     var errors = Io.File.stderr().writerStreaming(init.io, &error_buffer);
-    const status = try run(arena, init.io, project, given, &out.interface, &errors.interface);
+    const context: Context = .{ .arena = arena, .io = init.io, .environ = init.environ_map, .out = &out.interface, .errors = &errors.interface };
+    const status = try run(&context, project, given);
     try errors.interface.flush();
     try out.interface.flush();
     std.process.exit(status);
 }
 
 /// Reads the files the command line names, counts, and compares. Returns the exit status.
-pub fn run(arena: Allocator, io: Io, comptime project: Config, given: []const []const u8, out: *Io.Writer, errors: *Io.Writer) !u8 {
+pub fn run(context: *const Context, comptime project: Config, given: []const []const u8) !u8 {
+    const arena = context.arena;
+    const out = context.out;
+    const errors = context.errors;
     const record = given.len > 0 and std.mem.eql(u8, given[0], record_flag);
     const paths = given[@intFromBool(record)..];
     if (paths.len == 0) {
@@ -99,7 +104,7 @@ pub fn run(arena: Allocator, io: Io, comptime project: Config, given: []const []
     }
     var found: std.ArrayList(Pin) = .empty;
     for (paths) |path| {
-        const text = Io.Dir.cwd().readFileAlloc(io, path, arena, .unlimited) catch |failure| {
+        const text = Io.Dir.cwd().readFileAlloc(context.io, path, arena, .unlimited) catch |failure| {
             try report_line.write(errors, .{ .source = path }, .@"error", rule, "cannot read: {s}", .{@errorName(failure)});
             return exit_unusable;
         };
@@ -181,6 +186,24 @@ test "report refuses a count that differs, an unpinned symbol and a pin no file 
     try expect_report(&.{ matched[0], .{ .symbol = "lib_kernel_avx2", .sites = 5 } }, "tools/checkfree_sites.zig: error: [checkfree] lib_kernel_avx2 reaches 5 check sites; the table pins 4\n");
     try expect_report(&.{ matched[0], matched[1], .{ .symbol = "lib_new", .sites = 0 } }, "tools/checkfree_sites.zig: error: [checkfree] lib_new reaches 0 check sites and has no pin\n");
     try expect_report(matched[1..], "tools/checkfree_sites.zig: error: [checkfree] no file exports lib_direct\n");
+}
+
+test "run refuses a command line with no file, and a file it cannot read" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var environ: std.process.Environ.Map = .init(arena);
+    var out_buffer: [output_buffer_len]u8 = undefined;
+    var out: Io.Writer = .fixed(&out_buffer);
+    var error_buffer: [output_buffer_len]u8 = undefined;
+    var errors: Io.Writer = .fixed(&error_buffer);
+    const context: Context = .{ .arena = arena, .io = testing.io, .environ = &environ, .out = &out, .errors = &errors };
+    try testing.expectEqual(exit_unusable, try run(&context, test_project, &.{record_flag}));
+    try testing.expectEqualStrings("checkfree: error: [checkfree] usage: checkfree [--record] <file.s>...\n", errors.buffered());
+    errors.end = 0;
+    try testing.expectEqual(exit_unusable, try run(&context, test_project, &.{".zig-cache/tmp/no-such.s"}));
+    try testing.expectEqualStrings(".zig-cache/tmp/no-such.s: error: [checkfree] cannot read: FileNotFound\n", errors.buffered());
+    try testing.expectEqual(0, out.buffered().len);
 }
 
 test "the sample's symbols give the test project's pins" {

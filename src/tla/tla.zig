@@ -28,6 +28,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const report_line = @import("../report_line.zig");
+const Context = @import("../context.zig").Context;
 
 const header = @import("tla_header.zig");
 const models = @import("tla_models.zig");
@@ -63,8 +64,8 @@ const exit_mismatch: u8 = 1;
 const exit_unusable: u8 = 2;
 const output_buffer_len: usize = 4096;
 
-/// Why a configuration cannot be run, which the report names.
-fn check_config(comptime project: Config) ?[]const u8 {
+/// Why a configuration cannot run, which the compile error names.
+pub fn check_config(comptime project: Config) ?[]const u8 {
     if (project.tlc_release.len == 0) return "tlc_release names no release";
     if (project.tlc_sha256.len != tlc.sha256_hex_len) return "tlc_sha256 is not 64 hex digits";
     for (project.tlc_sha256) |digit| {
@@ -83,23 +84,15 @@ pub fn main(init: std.process.Init, comptime project: Config) !void {
     var out = Io.File.stdout().writerStreaming(init.io, &output_buffer);
     var errors = Io.File.stderr().writerStreaming(init.io, &error_buffer);
     const context: Context = .{ .arena = arena, .io = init.io, .environ = init.environ_map, .out = &out.interface, .errors = &errors.interface };
-    const status = try run(context, project, given);
+    const status = try run(&context, project, given);
     try errors.interface.flush();
     try out.interface.flush();
     std.process.exit(status);
 }
 
-pub const Context = struct {
-    arena: Allocator,
-    io: Io,
-    environ: *const std.process.Environ.Map,
-    out: *Io.Writer,
-    errors: *Io.Writer,
-};
-
 /// Checks the jar, then every configuration `given` names, or every one under the models
 /// directory when it names none. Returns the exit status.
-pub fn run(context: Context, comptime project: Config, given: []const []const u8) !u8 {
+pub fn run(context: *const Context, comptime project: Config, given: []const []const u8) !u8 {
     const jar = verified_jar(context, project) catch |failure| {
         try report_line.write(context.errors, .{ .source = project.models_directory }, .@"error", rule, "TLC cannot run: {t}", .{failure});
         return exit_unusable;
@@ -122,7 +115,7 @@ pub fn run(context: Context, comptime project: Config, given: []const []const u8
 /// The jar, fetched into the cache when neither the variable nor the cache has it, and refused
 /// unless its SHA-256 is the pinned one. Public for a project's tool that runs TLC some other way,
 /// such as for random walks, and holds TLC to the same pin.
-pub fn verified_jar(context: Context, comptime project: Config) ![]const u8 {
+pub fn verified_jar(context: *const Context, comptime project: Config) ![]const u8 {
     const path = try tlc.jar_path(context.arena, context.environ, project.tlc_release);
     const named_by_variable = context.environ.get(tlc.jar_variable) != null;
     Io.Dir.cwd().access(context.io, path, .{}) catch |failure| switch (failure) {
@@ -142,7 +135,7 @@ fn named(arena: Allocator, given: []const []const u8) ![]models.Configuration {
 }
 
 /// Runs one configuration and reports it. True when TLC concluded what it expects.
-fn check(context: Context, comptime project: Config, jar: []const u8, configuration: models.Configuration) !bool {
+fn check(context: *const Context, comptime project: Config, jar: []const u8, configuration: models.Configuration) !bool {
     const path = try std.fs.path.join(context.arena, &.{ configuration.model_directory, configuration.relative_path });
     const location: report_line.Location = .{ .source = path };
     const plan = planned(context, configuration, path) catch |failure| {
@@ -183,7 +176,7 @@ const Plan = struct {
     module: []const u8,
 };
 
-fn planned(context: Context, configuration: models.Configuration, path: []const u8) !Plan {
+fn planned(context: *const Context, configuration: models.Configuration, path: []const u8) !Plan {
     const text = try Io.Dir.cwd().readFileAlloc(context.io, path, context.arena, .limited(configuration_len_max));
     const read = try header.read(text);
     const expect = read.expect orelse if (configuration.is_mutant) header.Expectation.violated else return error.NoExpectation;
@@ -266,7 +259,7 @@ test "state_label keeps each configuration's states apart" {
 
 test "the root exports these names alone" {
     try @import("../public_names.zig").expect(@This(), &.{
-        "states_path", "Config", "main", "Context", "run", "verified_jar",
+        "states_path", "Config", "check_config", "main", "run", "verified_jar",
     });
 }
 

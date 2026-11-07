@@ -266,15 +266,15 @@ fn name_and_body(tree: *const Ast, node: Node.Index) ?struct { Ast.TokenIndex, N
     return .{ proto.name_token orelse return null, body };
 }
 
-/// Scores one `fn_decl` or `test_decl` node without the collector's walk, and sets `too_deep`
-/// when the body nests past `tree_depth_max`. Returns null for a function declaration with no
-/// name token. `path` is left empty for the caller to fill.
-pub fn score_declaration(tree: *const Ast, node: Node.Index, too_deep: *bool) ?FunctionScore {
+/// Scores one `fn_decl` or `test_decl` node without the collector's walk. Returns
+/// `error.NestingTooDeep` when the body nests past `tree_depth_max`, and null for a function
+/// declaration with no name token. `path` is left empty for the caller to fill.
+pub fn score_declaration(tree: *const Ast, node: Node.Index) error{NestingTooDeep}!?FunctionScore {
     const name_token, const body = name_and_body(tree, node) orelse return null;
     const name = tree.tokenSlice(name_token);
     var scorer: Scorer = .{ .tree = tree, .function_name = name };
     scorer.visit(body, 0);
-    if (scorer.too_deep) too_deep.* = true;
+    if (scorer.too_deep) return error.NestingTooDeep;
     const location = tree.tokenLocation(0, name_token);
     return .{
         .path = "",
@@ -305,18 +305,17 @@ pub fn score_source(
     if (collector.too_deep) return error.NestingTooDeep;
 
     const owned_path = try arena.dupe(u8, path);
-    var too_deep = false;
     var results: std.ArrayList(FunctionScore) = .empty;
     try results.ensureTotalCapacity(arena, declarations.items.len);
     for (declarations.items) |declaration| {
-        var result = score_declaration(&tree, declaration, &too_deep) orelse continue;
+        // The collector walked every node of every body one or more levels deeper than the scorer
+        // counts it, and found none past `tree_depth_max`, so the scorer cannot find one either.
+        const scored = score_declaration(&tree, declaration) catch unreachable;
+        var result = scored orelse continue;
         result.path = owned_path;
         result.name = try arena.dupe(u8, result.name);
         results.appendAssumeCapacity(result);
     }
-    // The collector walked every node of every body one or more levels deeper than the scorer
-    // counts it, and found none past `tree_depth_max`, so the scorer cannot find one either.
-    std.debug.assert(!too_deep);
     return results.items;
 }
 

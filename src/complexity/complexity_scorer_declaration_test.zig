@@ -223,10 +223,8 @@ test "the scorer stops at the tree depth when it walks a body on its own" {
     var tree = try Ast.parse(arena, source, .zig);
     defer tree.deinit(arena);
     try testing.expectEqual(0, tree.errors.len);
-    var too_deep = false;
-    const scored = scorer.score_declaration(&tree, tree.rootDecls()[0], &too_deep);
-    try testing.expect(scored != null);
-    try testing.expect(too_deep);
+    const scored = scorer.score_declaration(&tree, tree.rootDecls()[0]);
+    try testing.expectError(error.NestingTooDeep, scored);
 }
 
 /// One function declaration, repeated to build a file at and past `functions_per_file_max`.

@@ -11,6 +11,8 @@
 //!
 //! Run:  lean
 //!
+//! The tool reads no argument.
+//!
 //! Runs `lake build` in the Lean directory, with lake's own output on the terminal, because a
 //! build can run for minutes. The directory must hold `lean-toolchain`, which elan reads to pick
 //! the Lean release, so the release is pinned by the project and never by whatever is installed.
@@ -23,6 +25,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const report_line = @import("../report_line.zig");
+const Context = @import("../context.zig").Context;
 
 pub const Config = struct {
     /// The Lean project, from the working directory.
@@ -44,23 +47,42 @@ const exit_failed: u8 = 1;
 const exit_unusable: u8 = 2;
 const output_buffer_len: usize = 4096;
 
+/// Why a configuration cannot run, which the compile error names.
+pub fn check_config(comptime project: Config) ?[]const u8 {
+    if (project.directory.len == 0) return "directory names no Lean project";
+    if (project.lake_arguments.len == 0) return "lake_arguments asks lake to do nothing";
+    return null;
+}
+
 pub fn main(init: std.process.Init, comptime project: Config) !void {
+    comptime if (check_config(project)) |reason| @compileError(reason);
     const arena = init.arena.allocator();
+    const all_arguments = try init.minimal.args.toSlice(arena);
+    const given = if (all_arguments.len == 0) all_arguments else all_arguments[1..];
+    var output_buffer: [output_buffer_len]u8 = undefined;
     var error_buffer: [output_buffer_len]u8 = undefined;
+    var out = Io.File.stdout().writerStreaming(init.io, &output_buffer);
     var errors = Io.File.stderr().writerStreaming(init.io, &error_buffer);
-    const status = try run(arena, init.io, init.environ_map, project, &errors.interface);
+    const context: Context = .{ .arena = arena, .io = init.io, .environ = init.environ_map, .out = &out.interface, .errors = &errors.interface };
+    const status = try run(&context, project, given);
     try errors.interface.flush();
+    try out.interface.flush();
     std.process.exit(status);
 }
 
-/// Builds the Lean project, and returns the exit status.
-pub fn run(arena: Allocator, io: Io, environ: *const std.process.Environ.Map, comptime project: Config, errors: *Io.Writer) !u8 {
+/// Builds the Lean project, and returns the exit status. The tool reads no argument, so `given`
+/// is left unread; lake's own output goes to the terminal.
+pub fn run(context: *const Context, comptime project: Config, given: []const []const u8) !u8 {
+    _ = given;
+    const arena = context.arena;
+    const io = context.io;
+    const errors = context.errors;
     const toolchain = try std.fs.path.join(arena, &.{ project.directory, toolchain_file });
     Io.Dir.cwd().access(io, toolchain, .{}) catch {
         try report_line.write(errors, .{ .source = toolchain }, .@"error", rule, "missing: a Lean project pins its release there", .{});
         return exit_unusable;
     };
-    for (try lake_candidates(arena, environ)) |lake| {
+    for (try lake_candidates(arena, context.environ)) |lake| {
         var argv: std.ArrayList([]const u8) = .empty;
         try argv.append(arena, lake);
         try argv.appendSlice(arena, project.lake_arguments);
@@ -119,14 +141,23 @@ test "status_of passes lake's success and fails everything else" {
 test "run refuses a directory that pins no Lean release" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
-    var environ: std.process.Environ.Map = .init(arena_state.allocator());
+    const arena = arena_state.allocator();
+    var environ: std.process.Environ.Map = .init(arena);
     var buffer: [512]u8 = undefined;
     var errors: Io.Writer = .fixed(&buffer);
-    const status = try run(arena_state.allocator(), testing.io, &environ, .{ .directory = ".zig-cache/tmp/no-lean-here" }, &errors);
+    var out: Io.Writer = .fixed(&.{});
+    const context: Context = .{ .arena = arena, .io = testing.io, .environ = &environ, .out = &out, .errors = &errors };
+    const status = try run(&context, .{ .directory = ".zig-cache/tmp/no-lean-here" }, &.{});
     try testing.expectEqual(2, status);
     try testing.expect(std.mem.indexOf(u8, errors.buffered(), "lean-toolchain: error: [lean] missing") != null);
 }
 
+test "check_config refuses an empty directory and an empty lake command" {
+    try testing.expectEqual(null, check_config(.{}));
+    try testing.expect(check_config(.{ .directory = "" }) != null);
+    try testing.expect(check_config(.{ .lake_arguments = &.{} }) != null);
+}
+
 test "the root exports these names alone" {
-    try @import("../public_names.zig").expect(@This(), &.{ "Config", "main", "run" });
+    try @import("../public_names.zig").expect(@This(), &.{ "Config", "check_config", "main", "run" });
 }

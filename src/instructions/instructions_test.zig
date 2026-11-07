@@ -7,6 +7,8 @@ const Io = std.Io;
 const instructions = @import("instructions.zig");
 const baseline = @import("instructions_baseline.zig");
 const cachegrind = @import("instructions_cachegrind.zig");
+const engine = @import("instructions_run.zig");
+const Context = @import("../context.zig").Context;
 
 const testing = std.testing;
 
@@ -83,9 +85,10 @@ fn baseline_path(arena: Allocator, tmp: *const testing.TmpDir) ![]const u8 {
 /// Runs the engine once, checking or writing the baseline in `tmp`, and returns its exit status.
 fn run_once(arena: Allocator, tmp: *const testing.TmpDir, counter: FakeCounter, rewrite: bool, printed: *Printed) !u8 {
     printed.reset();
-    const context: instructions.Context = .{ .arena = arena, .io = testing.io, .out = &printed.out, .errors = &printed.errors };
-    const invocation: instructions.Invocation = .{ .rewrite = rewrite, .program = "bench", .baseline = try baseline_path(arena, tmp) };
-    return instructions.run(context, project, counter, invocation);
+    var environ: std.process.Environ.Map = .init(arena);
+    const context: Context = .{ .arena = arena, .io = testing.io, .environ = &environ, .out = &printed.out, .errors = &printed.errors };
+    const invocation: engine.Invocation = .{ .rewrite = rewrite, .program = "bench", .baseline = try baseline_path(arena, tmp) };
+    return engine.run_counted(&context, project, &counter, &invocation);
 }
 
 fn read_baseline(arena: Allocator, tmp: *const testing.TmpDir) ![]const u8 {
@@ -93,16 +96,16 @@ fn read_baseline(arena: Allocator, tmp: *const testing.TmpDir) ![]const u8 {
 }
 
 test "parse_arguments reads a program, or --rewrite and a program, and nothing else" {
-    const check = instructions.parse_arguments(&.{"zig-out/bin/bench"}, "bench/instructions.zon").?;
+    const check = try engine.parse_arguments(&.{"zig-out/bin/bench"}, "bench/instructions.zon");
     try testing.expect(!check.rewrite);
     try testing.expectEqualStrings("zig-out/bin/bench", check.program);
     try testing.expectEqualStrings("bench/instructions.zon", check.baseline);
-    try testing.expect(instructions.parse_arguments(&.{ "--rewrite", "bench" }, "b.zon").?.rewrite);
+    try testing.expect((try engine.parse_arguments(&.{ "--rewrite", "bench" }, "b.zon")).rewrite);
     const refused = [_][]const []const u8{
         &.{},                     &.{"--rewrite"},          &.{ "bench", "--rewrite" },
         &.{ "--rewrite", "--x" }, &.{ "--check", "bench" }, &.{ "a", "b", "c" },
     };
-    for (refused) |given| try testing.expectEqual(null, instructions.parse_arguments(given, "b.zon"));
+    for (refused) |given| try testing.expectError(error.Usage, engine.parse_arguments(given, "b.zon"));
 }
 
 test "check_config refuses a configuration the engine cannot run" {
@@ -293,15 +296,16 @@ test "a rewrite refuses a case that counts no instructions per operation" {
     try testing.expectError(error.FileNotFound, tmp.dir.access(testing.io, "instructions.zon", .{}));
 }
 
-test "start refuses a command line it cannot read, and a counter that does not run" {
+test "run refuses a command line it cannot read, and a counter that does not run" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     var printed: Printed = .{};
     printed.reset();
-    const context: instructions.Context = .{ .arena = arena_state.allocator(), .io = testing.io, .out = &printed.out, .errors = &printed.errors };
-    try testing.expectEqual(2, try instructions.start(context, project, &.{}));
+    var environ: std.process.Environ.Map = .init(arena_state.allocator());
+    const context: Context = .{ .arena = arena_state.allocator(), .io = testing.io, .environ = &environ, .out = &printed.out, .errors = &printed.errors };
+    try testing.expectEqual(2, try instructions.run(&context, project, &.{}));
     try testing.expect(printed.printed("instructions: error: [instructions] usage: instructions [--rewrite] <program>"));
     const absent: instructions.Config = .{ .cases = project.cases, .valgrind_program = "pepegrillo-test-no-such-valgrind" };
-    try testing.expectEqual(2, try instructions.start(context, absent, &.{"bench"}));
+    try testing.expectEqual(2, try instructions.run(&context, absent, &.{"bench"}));
     try testing.expect(printed.printed("bench/instructions.zon: error: [instructions] cannot count: pepegrillo-test-no-such-valgrind did not run (FileNotFound)"));
 }

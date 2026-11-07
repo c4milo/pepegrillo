@@ -5,7 +5,7 @@
 //! A field with a default holds a value the linter's first projects shared. A field with no
 //! default is one on which they differed, so every project states it.
 //!
-//! `invalid_reason` names a configuration no message could be judged under. `commit.main` checks
+//! `check_config` names a configuration no message could be judged under. `commit.main` checks
 //! it at compile time, so such a configuration does not build.
 
 const std = @import("std");
@@ -90,7 +90,7 @@ pub const Config = struct {
 };
 
 /// Why no message could be judged under `config`, or null when it is usable.
-pub fn invalid_reason(config: *const Config) ?[]const u8 {
+pub fn check_config(comptime config: Config) ?[]const u8 {
     if (config.commit_types.len == 0) return "commit_types is empty, so every subject is refused";
     if (config.findings_max == 0) return "findings_max is 0, so the first finding is an error";
     if (config.message_lines_max == 0) return "message_lines_max is 0, so no message is read";
@@ -112,26 +112,26 @@ const usable: Config = .{
 };
 
 test "a configuration with the defaults is usable" {
-    try testing.expectEqual(null, invalid_reason(&usable));
-    var with_scopes = usable;
-    with_scopes.known_scopes = &.{"store"};
-    try testing.expectEqual(null, invalid_reason(&with_scopes));
+    try testing.expectEqual(null, check_config(usable));
+    const with_scopes = comptime blk: {
+        var project = usable;
+        project.known_scopes = &.{"store"};
+        break :blk project;
+    };
+    try testing.expectEqual(null, check_config(with_scopes));
 }
 
-test "invalid_reason names each configuration no message could be judged under" {
-    var no_types = usable;
-    no_types.commit_types = &.{};
-    try testing.expect(invalid_reason(&no_types) != null);
-    var no_findings = usable;
-    no_findings.findings_max = 0;
-    try testing.expect(invalid_reason(&no_findings) != null);
-    var no_lines = usable;
-    no_lines.message_lines_max = 0;
-    try testing.expect(invalid_reason(&no_lines) != null);
-    var no_commits = usable;
-    no_commits.commits_per_run_max = 0;
-    try testing.expect(invalid_reason(&no_commits) != null);
-    var no_scopes = usable;
-    no_scopes.known_scopes = &.{};
-    try testing.expect(invalid_reason(&no_scopes) != null);
+/// `usable` with one field set to `value`.
+fn with(comptime field: []const u8, comptime value: anytype) Config {
+    var project = usable;
+    @field(project, field) = value;
+    return project;
+}
+
+test "check_config names each configuration no message could be judged under" {
+    try testing.expect(check_config(comptime with("commit_types", &.{})) != null);
+    try testing.expect(check_config(comptime with("findings_max", 0)) != null);
+    try testing.expect(check_config(comptime with("message_lines_max", 0)) != null);
+    try testing.expect(check_config(comptime with("commits_per_run_max", 0)) != null);
+    try testing.expect(check_config(comptime with("known_scopes", &.{})) != null);
 }

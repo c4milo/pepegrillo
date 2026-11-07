@@ -82,7 +82,8 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 ## Layout
 
 - `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`, `tla`,
-  `lean`, `instructions`, `checkfree`, and `report_line`, the finding line every tool prints.
+  `lean`, `instructions`, `checkfree`, `report_line`, the finding line every tool prints, and
+  `Context`.
 - Each root exports names, never a file, except the namespaces `lint.report`, `lint.paths`,
   `lint.ast`, `lint.harness` and each `lint.rules.<rule>`. A test in each root lists its names
   through `src/public_names.zig`, so a name added or removed by accident fails it.
@@ -94,7 +95,11 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 - `src/tla/` runs TLC: `tla.zig` the tool, `tla_models.zig` where the configurations are,
   `tla_header.zig` what each one expects, `tla_tlc.zig` the jar, its pin and TLC's verdict.
 - `src/lean/` runs lake over a project's Lean proofs.
+- `src/context.zig` is `Context`, what the `run` of each tool receives. `tla`, `lean`,
+  `instructions`, `checkfree` and `commit` share one entry shape: `check_config`, `run` and
+  `main`.
 - `src/instructions/` counts a project's benchmark cases: `instructions.zig` the tool,
+  `instructions_run.zig` the count and the check once the command line is read,
   `instructions_measure.zig` a cost from three runs and its verdict, `instructions_baseline.zig`
   the file of counts a project commits, `instructions_cachegrind.zig` the counter.
 - `src/checkfree/` counts the safety check sites of a project's exported functions:

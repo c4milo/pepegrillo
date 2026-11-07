@@ -33,6 +33,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const Context = @import("../context.zig").Context;
 
 const arguments = @import("arguments.zig");
 const config = @import("config.zig");
@@ -46,6 +47,7 @@ pub const Config = config.Config;
 pub const Finding = findings.Finding;
 pub const Findings = findings.Findings;
 pub const Severity = findings.Severity;
+pub const check_config = config.check_config;
 pub const commit_types_default = config.commit_types_default;
 pub const trailer_keys_default = config.trailer_keys_default;
 
@@ -139,31 +141,25 @@ fn range_command(
 }
 
 /// One run over the command-line arguments, without the program name: every finding written to
-/// `out`, and the exit status returned. A usage error or a failed lint writes no finding, and
-/// writes what went wrong to `errors`.
-pub fn run(
-    arena: Allocator,
-    io: Io,
-    comptime project: Config,
-    given: []const []const u8,
-    out: *Io.Writer,
-    errors: *Io.Writer,
-) !u8 {
+/// `context.out`, and the exit status returned. A usage error or a failed lint writes no finding,
+/// and writes what went wrong to `context.errors`.
+pub fn run(context: *const Context, comptime project: Config, given: []const []const u8) !u8 {
+    const errors = context.errors;
     const options = arguments.parse_arguments(given) catch |err| {
         try errors.print("error: {s}\n{s}", .{ @errorName(err), arguments.usage });
         return exit_usage;
     };
-    var results: Findings = .{ .arena = arena, .findings_max = project.findings_max };
-    lint(arena, io, project, &results, options, errors) catch |err| {
+    var results: Findings = .{ .arena = context.arena, .findings_max = project.findings_max };
+    lint(context.arena, context.io, project, &results, options, errors) catch |err| {
         try errors.print("error: {s}\n", .{@errorName(err)});
         return exit_usage;
     };
-    try results.write(out);
+    try results.write(context.out);
     return exit_status(&results);
 }
 
 pub fn main(init: std.process.Init, comptime project: Config) !void {
-    comptime if (config.invalid_reason(&project)) |reason| @compileError(reason);
+    comptime if (check_config(project)) |reason| @compileError(reason);
     const arena = init.arena.allocator();
     const all_arguments = try init.minimal.args.toSlice(arena);
     if (all_arguments.len > arguments_max) return error.TooManyArguments;
@@ -174,7 +170,8 @@ pub fn main(init: std.process.Init, comptime project: Config) !void {
     // output when standard output is redirected to a file.
     var out = Io.File.stdout().writerStreaming(init.io, &output_buffer);
     var errors = Io.File.stderr().writerStreaming(init.io, &error_buffer);
-    const status = try run(arena, init.io, project, given, &out.interface, &errors.interface);
+    const context: Context = .{ .arena = arena, .io = init.io, .environ = init.environ_map, .out = &out.interface, .errors = &errors.interface };
+    const status = try run(&context, project, given);
     try errors.interface.flush();
     try out.interface.flush();
     std.process.exit(status);
@@ -190,7 +187,7 @@ test "the root exports these names alone" {
         "Config",               "Finding",              "Findings",     "Severity",
         "commit_types_default", "trailer_keys_default", "lint_commits", "lint_message_text",
         "run",                  "main",                 "exit_clean",   "exit_violations",
-        "exit_usage",
+        "exit_usage",           "check_config",
     });
 }
 
@@ -395,7 +392,9 @@ test "run writes every finding and returns the exit status, and caps the finding
     var out: Io.Writer = .fixed(&buffer);
     var error_buffer: [512]u8 = undefined;
     var errors: Io.Writer = .fixed(&error_buffer);
-    const status = try run(arena, testing.io, test_config, &given, &out, &errors);
+    var environ: std.process.Environ.Map = .init(arena);
+    const context: Context = .{ .arena = arena, .io = testing.io, .environ = &environ, .out = &out, .errors = &errors };
+    const status = try run(&context, test_config, &given);
     try testing.expectEqual(exit_violations, status);
     try testing.expectEqual(0, errors.buffered().len);
     const description_lines = ": error: [subject-description] ";
@@ -407,8 +406,10 @@ test "run writes every finding and returns the exit status, and caps the finding
     };
     var capped_out: Io.Writer = .fixed(&buffer);
     var capped_errors: Io.Writer = .fixed(&error_buffer);
-    const io = testing.io;
-    const capped_status = try run(arena, io, one_finding, &given, &capped_out, &capped_errors);
+    var capped = context;
+    capped.out = &capped_out;
+    capped.errors = &capped_errors;
+    const capped_status = try run(&capped, one_finding, &given);
     try testing.expectEqual(exit_usage, capped_status);
     try testing.expectEqual(0, capped_out.buffered().len);
     try testing.expectEqualStrings("error: TooManyFindings\n", capped_errors.buffered());
@@ -423,7 +424,9 @@ test "run returns the usage status for arguments it cannot read, and writes noth
     var errors: Io.Writer = .fixed(&error_buffer);
     const given = [_][]const u8{"--rule"};
     const arena = arena_state.allocator();
-    const status = try run(arena, testing.io, test_config, &given, &out, &errors);
+    var environ: std.process.Environ.Map = .init(arena);
+    const context: Context = .{ .arena = arena, .io = testing.io, .environ = &environ, .out = &out, .errors = &errors };
+    const status = try run(&context, test_config, &given);
     try testing.expectEqual(exit_usage, status);
     try testing.expectEqual(0, out.buffered().len);
     const want = "error: UnknownArgument\n" ++ arguments.usage;

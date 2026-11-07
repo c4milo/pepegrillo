@@ -81,6 +81,19 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
+Five tools, `tla`, `lean`, `instructions`, `checkfree` and `commit`, have one entry shape. A
+project that runs one from its own entry point calls `run` with a `pepegrillo.Context`:
+
+```zig
+pub fn check_config(comptime project: Config) ?[]const u8
+pub fn run(context: *const pepegrillo.Context, comptime project: Config, given: []const []const u8) !u8
+pub fn main(init: std.process.Init, comptime project: Config) !void
+```
+
+`check_config` names why a configuration cannot run, and `main` makes that a compile error. `run`
+reads `given`, the arguments without the program name, writes the report to `context.out`, and
+returns the exit status.
+
 ## Formal specifications
 
 A project keeps its formal specifications under `spec/`: TLA+ models in `spec/tla/`, one directory
