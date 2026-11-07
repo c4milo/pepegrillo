@@ -26,7 +26,7 @@ const git_revision_terminator = "--";
 const git_success: u8 = 0;
 
 /// Bytes of git's error output the linter prints back.
-const max_git_stderr_bytes: usize = 64 * 1024;
+const git_stderr_len_max: usize = 64 * 1024;
 
 /// The byte git writes between the fields of one commit.
 const field_separator: u8 = 0;
@@ -62,13 +62,13 @@ pub fn is_merge(parents: []const u8) bool {
 }
 
 /// Splits `git log` output into commits. Reading stops at the first field group whose sha is
-/// empty, which is the newline git writes after the last commit. More than `max_commits` commits
+/// empty, which is the newline git writes after the last commit. More than `commits_max` commits
 /// is an error, never a truncated run.
-pub fn split_commits(arena: Allocator, output: []const u8, max_commits: usize) ![]const Commit {
+pub fn split_commits(arena: Allocator, output: []const u8, commits_max: usize) ![]const Commit {
     var fields: std.ArrayList([]const u8) = .empty;
     var iterator = std.mem.splitScalar(u8, output, field_separator);
     while (iterator.next()) |field| {
-        if (fields.items.len >= max_commits * fields_per_commit) return error.TooManyCommits;
+        if (fields.items.len >= commits_max * fields_per_commit) return error.TooManyCommits;
         try fields.append(arena, field);
     }
     var commits: std.ArrayList(Commit) = .empty;
@@ -111,7 +111,7 @@ pub fn run_git_log(
 pub fn git_log_options(
     arena: Allocator,
     revisions: []const []const u8,
-    max_output_bytes: usize,
+    output_len_max: usize,
 ) !std.process.RunOptions {
     var argv: std.ArrayList([]const u8) = .empty;
     try argv.appendSlice(arena, &.{ git_program, git_log_command, git_log_format });
@@ -119,8 +119,8 @@ pub fn git_log_options(
     try argv.append(arena, git_revision_terminator);
     return .{
         .argv = argv.items,
-        .stdout_limit = .limited(max_output_bytes),
-        .stderr_limit = .limited(max_git_stderr_bytes),
+        .stdout_limit = .limited(output_len_max),
+        .stderr_limit = .limited(git_stderr_len_max),
     };
 }
 
@@ -129,7 +129,7 @@ pub fn git_log_options(
 const testing = std.testing;
 
 /// The commit cap the tests below split with.
-const test_max_commits: usize = 16;
+const test_commits_max: usize = 16;
 
 test "is_merge counts the parents git wrote" {
     try testing.expect(!is_merge(""));
@@ -147,7 +147,7 @@ pub const two_commit_log =
 test "split_commits reads three fields per commit and stops at the trailing newline" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
-    const commits = try split_commits(arena_state.allocator(), two_commit_log, test_max_commits);
+    const commits = try split_commits(arena_state.allocator(), two_commit_log, test_commits_max);
     try testing.expectEqual(2, commits.len);
     try testing.expectEqualStrings("aaa", commits[0].sha);
     try testing.expectEqualStrings("ppp", commits[0].parents);
@@ -160,11 +160,11 @@ test "split_commits reads three fields per commit and stops at the trailing newl
 test "split_commits reads empty output as no commit" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
-    const commits = try split_commits(arena_state.allocator(), "", test_max_commits);
+    const commits = try split_commits(arena_state.allocator(), "", test_commits_max);
     try testing.expectEqual(0, commits.len);
 }
 
-test "split_commits refuses output over max_commits, never truncating the run" {
+test "split_commits refuses output over commits_max, never truncating the run" {
     // The cap counts fields, and the newline git writes after the last commit is a seventh field
     // here. So two commits need a cap of three: the cap errs early by that one field.
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);

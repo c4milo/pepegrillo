@@ -53,9 +53,9 @@ pub fn expect_findings_with(
         arena,
         text,
         config.trailer_keys,
-        config.max_message_lines,
+        config.message_lines_max,
     );
-    var findings: Findings = .{ .arena = arena, .max_findings = config.max_findings };
+    var findings: Findings = .{ .arena = arena, .findings_max = config.findings_max };
     try rules.check_all(config, &findings, fixture_source, &message);
     try testing.expectEqual(expected.len, findings.count());
     for (findings.items.items, expected) |finding, want| {
@@ -143,7 +143,7 @@ test "every rule fires on its own failing message, and only that rule fires" {
         const arena = arena_state.allocator();
         const keys = test_config.trailer_keys;
         const message = try message_model.parse(arena, case.failing, keys, 64);
-        var findings: Findings = .{ .arena = arena, .max_findings = 16 };
+        var findings: Findings = .{ .arena = arena, .findings_max = 16 };
         try rules.check_all(test_config, &findings, fixture_source, &message);
         try testing.expectEqual(1, findings.count());
         try testing.expectEqualStrings(case.rule, findings.items.items[0].rule);

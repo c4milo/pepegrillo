@@ -36,7 +36,7 @@ fn expect_findings(text: []const u8, expected: []const []const u8) !void {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: commit.Findings = .{ .arena = arena, .max_findings = config.max_findings };
+    var results: commit.Findings = .{ .arena = arena, .findings_max = config.findings_max };
     try commit.lint_message_text(arena, config, &results, "message", text);
     try testing.expectEqual(expected.len, results.items.items.len);
     for (results.items.items, expected) |finding, wanted| {

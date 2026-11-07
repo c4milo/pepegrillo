@@ -36,7 +36,7 @@ const Scope = @import("../scope.zig").Scope;
 
 /// The most wrappers, arrays and optionals, the rule looks through to reach a declared type's
 /// element. Deeper than any type a person writes; a deeper one is reported as needing alignment.
-pub const max_type_depth: u32 = 16;
+pub const type_depth_max: u32 = 16;
 
 pub const Config = struct {
     /// The rule name findings are reported under and `--rule` selects.
@@ -79,7 +79,7 @@ const Visitor = struct {
     pub fn child(self: *Visitor, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         var buffer: [2]Node.Index = undefined;
         if (self.tree.fullContainerDecl(&buffer, node)) |container| {
             self.check_members(container.ast.members);
@@ -136,7 +136,7 @@ fn is_extern(tree: *const Ast, declaration: Ast.full.VarDecl) bool {
 fn element_needing_alignment(tree: *const Ast, type_node: Node.Index) ?Node.Index {
     var node = type_node;
     var depth: u32 = 0;
-    while (depth < max_type_depth) : (depth += 1) {
+    while (depth < type_depth_max) : (depth += 1) {
         switch (tree.nodeTag(node)) {
             .identifier => {
                 const type_name = tree.tokenSlice(tree.nodeMainToken(node));

@@ -73,14 +73,14 @@ pub const Message = struct {
     }
 };
 
-/// Splits `text` into a `Message`. A message of more than `max_lines` lines is an error.
+/// Splits `text` into a `Message`. A message of more than `lines_max` lines is an error.
 pub fn parse(
     arena: Allocator,
     text: []const u8,
     trailer_keys: []const []const u8,
-    max_lines: usize,
+    lines_max: usize,
 ) !Message {
-    const lines = try split_lines(arena, text, max_lines);
+    const lines = try split_lines(arena, text, lines_max);
     if (lines.len == 0) {
         return .{
             .lines = lines,
@@ -109,13 +109,13 @@ pub fn parse(
 
 /// The lines of `text`, with one trailing newline removed first. Empty text holds no line at all;
 /// `"\n"` holds one blank line.
-fn split_lines(arena: Allocator, text: []const u8, max_lines: usize) ![]const []const u8 {
+fn split_lines(arena: Allocator, text: []const u8, lines_max: usize) ![]const []const u8 {
     if (text.len == 0) return &.{};
     const trimmed = if (text[text.len - 1] == line_feed) text[0 .. text.len - 1] else text;
     var list: std.ArrayList([]const u8) = .empty;
     var iterator = std.mem.splitScalar(u8, trimmed, line_feed);
     while (iterator.next()) |line| {
-        if (list.items.len >= max_lines) return error.TooManyLines;
+        if (list.items.len >= lines_max) return error.TooManyLines;
         try list.append(arena, line);
     }
     return list.items;
@@ -249,7 +249,7 @@ test "parse splits lines the way an editor shows them" {
     try testing.expectEqualStrings("feat(store): add x", unterminated.subject);
 }
 
-test "parse refuses a message over max_lines, never truncating it" {
+test "parse refuses a message over lines_max, never truncating it" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();

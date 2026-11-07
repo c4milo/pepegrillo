@@ -17,11 +17,11 @@ const for_each_child = ast.for_each_child;
 
 /// Deepest AST node either walk recurses into, shared with the lint rules. A file nested deeper
 /// is reported as `error.NestingTooDeep` rather than scored.
-pub const max_tree_depth = ast.max_tree_depth;
+pub const tree_depth_max = ast.tree_depth_max;
 
 /// Functions and test blocks recorded per file. A file holding more is reported as
 /// `error.TooManyFunctions` rather than scored in part.
-pub const max_functions_per_file: usize = 4096;
+pub const functions_per_file_max: usize = 4096;
 
 /// One scored function or test block. `path` and `name` are owned by the arena passed to
 /// `score_source`, so a result outlives the parsed tree.
@@ -54,7 +54,7 @@ const Collector = struct {
     too_deep: bool = false,
 
     pub fn child(self: *Collector, node: Node.Index) void {
-        if (self.depth >= max_tree_depth) {
+        if (self.depth >= tree_depth_max) {
             self.too_deep = true;
             return;
         }
@@ -66,7 +66,7 @@ const Collector = struct {
     }
 
     fn record(self: *Collector, node: Node.Index) void {
-        if (self.declarations.items.len >= max_functions_per_file) {
+        if (self.declarations.items.len >= functions_per_file_max) {
             self.truncated = true;
             return;
         }
@@ -99,7 +99,7 @@ const Scorer = struct {
     const IfKind = enum { fresh, else_if };
 
     fn visit(self: *Scorer, node: Node.Index, nesting: u32) void {
-        if (self.depth >= max_tree_depth) {
+        if (self.depth >= tree_depth_max) {
             self.too_deep = true;
             return;
         }
@@ -267,7 +267,7 @@ fn name_and_body(tree: *const Ast, node: Node.Index) ?struct { Ast.TokenIndex, N
 }
 
 /// Scores one `fn_decl` or `test_decl` node without the collector's walk, and sets `too_deep`
-/// when the body nests past `max_tree_depth`. Returns null for a function declaration with no
+/// when the body nests past `tree_depth_max`. Returns null for a function declaration with no
 /// name token. `path` is left empty for the caller to fill.
 pub fn score_declaration(tree: *const Ast, node: Node.Index, too_deep: *bool) ?FunctionScore {
     const name_token, const body = name_and_body(tree, node) orelse return null;
@@ -298,7 +298,7 @@ pub fn score_source(
 
     var declarations: std.ArrayList(Node.Index) = .empty;
     defer declarations.deinit(arena);
-    try declarations.ensureTotalCapacity(arena, max_functions_per_file);
+    try declarations.ensureTotalCapacity(arena, functions_per_file_max);
     var collector: Collector = .{ .tree = &tree, .declarations = &declarations };
     for (tree.rootDecls()) |declaration| collector.child(declaration);
     if (collector.truncated) return error.TooManyFunctions;
@@ -315,7 +315,7 @@ pub fn score_source(
         results.appendAssumeCapacity(result);
     }
     // The collector walked every node of every body one or more levels deeper than the scorer
-    // counts it, and found none past `max_tree_depth`, so the scorer cannot find one either.
+    // counts it, and found none past `tree_depth_max`, so the scorer cannot find one either.
     std.debug.assert(!too_deep);
     return results.items;
 }

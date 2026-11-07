@@ -42,11 +42,11 @@ const home_variable = "HOME";
 const exit_success: u8 = 0;
 const exit_failed: u8 = 1;
 const exit_unusable: u8 = 2;
-const output_buffer_bytes: usize = 4096;
+const output_buffer_len: usize = 4096;
 
 pub fn main(init: std.process.Init, comptime project: Config) !void {
     const arena = init.arena.allocator();
-    var error_buffer: [output_buffer_bytes]u8 = undefined;
+    var error_buffer: [output_buffer_len]u8 = undefined;
     var errors = Io.File.stderr().writerStreaming(init.io, &error_buffer);
     const status = try run(arena, init.io, init.environ_map, project, &errors.interface);
     try errors.interface.flush();

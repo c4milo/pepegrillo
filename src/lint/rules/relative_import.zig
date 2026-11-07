@@ -28,7 +28,7 @@ const report = @import("../report.zig");
 const Scope = @import("../scope.zig").Scope;
 const import_path = @import("relative_import_path.zig");
 
-pub const max_resolved_segments = import_path.max_resolved_segments;
+pub const resolved_segments_max = import_path.resolved_segments_max;
 
 /// Which import paths are findings.
 pub const Mode = enum {
@@ -90,7 +90,7 @@ fn Walker(comptime config: Config) type {
         pub fn child(self: *@This(), node: Node.Index) void {
             self.depth += 1;
             defer self.depth -= 1;
-            std.debug.assert(self.depth <= ast.max_tree_depth);
+            std.debug.assert(self.depth <= ast.tree_depth_max);
             visit(config, self, node) catch |failure| {
                 self.failure = failure;
             };

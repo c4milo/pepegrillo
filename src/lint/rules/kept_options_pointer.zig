@@ -97,7 +97,7 @@ const Visitor = struct {
     pub fn child(self: *Visitor, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         var buffer: [2]Node.Index = undefined;
         if (self.tree.fullContainerDecl(&buffer, node)) |container| {
             self.check_members(container.ast.members);
@@ -175,7 +175,7 @@ const Body = struct {
         const child_type = pointer.ast.child_type;
         var buffer: [1]Node.Index = undefined;
         if (tree.fullFnProto(&buffer, child_type) != null) return .other;
-        var chain_buffer: [ast.max_chain_bytes]u8 = undefined;
+        var chain_buffer: [ast.chain_len_max]u8 = undefined;
         if (ast.chain_text(tree, child_type, &chain_buffer)) |chain| {
             if (is_any_of(ast.last_segment(chain), body.visitor.kept_types)) return .other;
         }
@@ -185,7 +185,7 @@ const Body = struct {
     pub fn child(body: *Body, node: Node.Index) void {
         body.depth += 1;
         defer body.depth -= 1;
-        std.debug.assert(body.depth <= ast.max_tree_depth);
+        std.debug.assert(body.depth <= ast.tree_depth_max);
         const tree = body.visitor.tree;
         var buffer: [2]Node.Index = undefined;
         // A nested container's functions are the container walk's to read.
@@ -210,7 +210,7 @@ const Body = struct {
             if (body.out_named(tree.tokenSlice(tree.nodeMainToken(operand))) == null) return;
             return body.check_literal(value);
         }
-        var chain_buffer: [ast.max_chain_bytes]u8 = undefined;
+        var chain_buffer: [ast.chain_len_max]u8 = undefined;
         const chain = ast.chain_text(tree, target, &chain_buffer) orelse return;
         // A chain of an out parameter alone is an assignment to a parameter, which Zig refuses.
         if (body.out_named(ast.first_segment(chain)) == null) return;
@@ -248,7 +248,7 @@ const Body = struct {
     /// The `*const` parameter `value` keeps: the parameter itself, or the address of a field of it.
     fn kept_pointer(body: *const Body, value: Node.Index) ?[]const u8 {
         const tree = body.visitor.tree;
-        var chain_buffer: [ast.max_chain_bytes]u8 = undefined;
+        var chain_buffer: [ast.chain_len_max]u8 = undefined;
         if (tree.nodeTag(value) == .address_of) {
             const operand = ungrouped(tree, tree.nodeData(value).node);
             const chain = ast.chain_text(tree, operand, &chain_buffer) orelse return null;
@@ -279,7 +279,7 @@ fn ungrouped(tree: *const Ast, node: Node.Index) Node.Index {
     var current = node;
     var removed: usize = 0;
     while (tree.nodeTag(current) == .grouped_expression) : (removed += 1) {
-        std.debug.assert(removed < ast.max_tree_depth);
+        std.debug.assert(removed < ast.tree_depth_max);
         current = tree.nodeData(current).node_and_token[0];
     }
     return current;

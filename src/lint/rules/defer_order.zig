@@ -93,7 +93,7 @@ fn Walker(comptime config: Config) type {
         pub fn child(self: *@This(), node: Node.Index) void {
             self.depth += 1;
             defer self.depth -= 1;
-            std.debug.assert(self.depth <= ast.max_tree_depth);
+            std.debug.assert(self.depth <= ast.tree_depth_max);
             visit(config, self, node) catch |failure| {
                 self.failure = failure;
             };

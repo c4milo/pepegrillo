@@ -104,7 +104,7 @@ test "the walk visits every regular file, skips build output and .git, and joins
     var run = new_run(arena_state.allocator());
     // The reported path is the root label joined with the entry's path; the files are read
     // through `tmp.dir`, so the label need not exist.
-    var root_buffer: [driver.max_path_bytes]u8 = undefined;
+    var root_buffer: [driver.path_len_max]u8 = undefined;
     const root = try std.fmt.bufPrint(&root_buffer, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     try Linter.walk_directory(&run, tmp.dir, root);
     run.context.findings.sort();
@@ -125,7 +125,7 @@ test "lint_path on a single file runs the rules, and a missing path is a file er
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "clean.zig", .data = "const one = 1;\n" });
-    var path_buffer: [driver.max_path_bytes]u8 = undefined;
+    var path_buffer: [driver.path_len_max]u8 = undefined;
     const path_format = ".zig-cache/tmp/{s}/clean.zig";
     const path = try std.fmt.bufPrint(&path_buffer, path_format, .{tmp.sub_path});
 
@@ -148,7 +148,7 @@ test "a .zig file that does not parse is reported under the parse pseudo-rule" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "broken.zig", .data = "fn broken( {\n" });
-    var path_buffer: [driver.max_path_bytes]u8 = undefined;
+    var path_buffer: [driver.path_len_max]u8 = undefined;
     const path_format = ".zig-cache/tmp/{s}/broken.zig";
     const path = try std.fmt.bufPrint(&path_buffer, path_format, .{tmp.sub_path});
 

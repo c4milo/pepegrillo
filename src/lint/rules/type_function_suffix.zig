@@ -68,7 +68,7 @@ const Visitor = struct {
     pub fn child(self: *Visitor, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         var buffer: [2]Node.Index = undefined;
         if (self.tree.fullContainerDecl(&buffer, node)) |container| {
             self.check_members(container.ast.members);
@@ -113,7 +113,7 @@ fn public_type_function(tree: *const Ast, member: Node.Index) ?Ast.TokenIndex {
     // A return type in parentheses, `(type)`, is the same type.
     var removed: usize = 0;
     while (tree.nodeTag(return_type) == .grouped_expression) : (removed += 1) {
-        std.debug.assert(removed < ast.max_tree_depth);
+        std.debug.assert(removed < ast.tree_depth_max);
         return_type = tree.nodeData(return_type).node_and_token[0];
     }
     if (tree.nodeTag(return_type) != .identifier) return null;

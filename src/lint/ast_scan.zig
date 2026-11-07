@@ -19,7 +19,7 @@ const ast = @import("ast.zig");
 /// The most identifiers `compare_identifiers` collects from one deferred expression. An
 /// expression that names more reads as `.shared`, so the limit costs a finding and never invents
 /// one.
-pub const max_deferred_identifiers: usize = 32;
+pub const deferred_identifiers_max: usize = 32;
 
 /// True when the subtree at `node` holds a `try`, or a `catch` whose right-hand side holds a
 /// `return`, a `break` or a `continue`. Those are the statements whose failure skips every
@@ -110,7 +110,7 @@ fn Walk(comptime State: type) type {
         pub fn child(self: *@This(), node: Node.Index) void {
             self.depth += 1;
             defer self.depth -= 1;
-            std.debug.assert(self.depth <= ast.max_tree_depth);
+            std.debug.assert(self.depth <= ast.tree_depth_max);
             self.state.note(self.tree, node);
             ast.for_each_child_reading(self.tree, node, self.parameter_types, self);
         }
@@ -152,7 +152,7 @@ const Exits = struct {
 
 /// The identifiers one subtree names, held by value so no read allocates.
 const NameSet = struct {
-    names: [max_deferred_identifiers][]const u8 = undefined,
+    names: [deferred_identifiers_max][]const u8 = undefined,
     count: usize = 0,
     /// Set when the subtree names more identifiers than `names` holds.
     overflowed: bool = false,
@@ -255,7 +255,7 @@ test "a name set holds what it is given and reports an overflow" {
     try testing.expect(set.holds("loop"));
     try testing.expect(!set.holds("loopx"));
     try testing.expect(!set.overflowed);
-    for (0..max_deferred_identifiers) |_| set.add("filler");
+    for (0..deferred_identifiers_max) |_| set.add("filler");
     try testing.expect(set.overflowed);
-    try testing.expectEqual(max_deferred_identifiers, set.count);
+    try testing.expectEqual(deferred_identifiers_max, set.count);
 }

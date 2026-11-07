@@ -104,7 +104,7 @@ const Visitor = struct {
     pub fn child(self: *Visitor, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         switch (self.tree.nodeTag(node)) {
             // A test's locals run in tests alone.
             .test_decl => return,

@@ -18,7 +18,7 @@ const paths = @import("../paths.zig");
 
 /// Path segments one resolution holds: the importing file's directory and the import path
 /// together. A path that needs more is reported as leaving its subsystem.
-pub const max_resolved_segments: usize = 32;
+pub const resolved_segments_max: usize = 32;
 
 /// The segment that climbs out of the importing file's directory.
 const parent_segment = "../";
@@ -45,7 +45,7 @@ pub fn leaves_subsystem(source_root: []const u8, path: []const u8, imported: []c
     const names_file = std.mem.indexOfScalar(u8, imported, paths.separator) != null or
         std.mem.indexOf(u8, imported, zig_file_marker) != null;
     if (!names_file) return false;
-    var buffer: [max_resolved_segments][]const u8 = undefined;
+    var buffer: [resolved_segments_max][]const u8 = undefined;
     const resolved = resolve(paths.dirname(path), imported, &buffer) orelse return true;
     const root = subsystem_root(source_root, path);
     if (root.len == 0) return true;
@@ -161,10 +161,10 @@ test "leaves_subsystem reports a file with no subsystem and a climb above the tr
     try testing.expect(leaves_subsystem("src", "tools/lint.zig", "../../tools/lint.zig"));
 }
 
-test "leaves_subsystem reports a resolution longer than max_resolved_segments" {
+test "leaves_subsystem reports a resolution longer than resolved_segments_max" {
     // The directory `src/store` is two segments and the file name one more.
-    const deep = "a/" ** (max_resolved_segments - 3) ++ "page.zig";
+    const deep = "a/" ** (resolved_segments_max - 3) ++ "page.zig";
     try testing.expect(!leaves_subsystem("src", "src/store/page.zig", deep));
-    const deeper = "a/" ** (max_resolved_segments - 2) ++ "page.zig";
+    const deeper = "a/" ** (resolved_segments_max - 2) ++ "page.zig";
     try testing.expect(leaves_subsystem("src", "src/store/page.zig", deeper));
 }

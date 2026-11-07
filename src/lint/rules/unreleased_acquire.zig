@@ -66,7 +66,7 @@ const report = @import("../report.zig");
 const Scope = @import("../scope.zig").Scope;
 
 /// The last names a call releases something by, unless the configuration names others.
-pub const default_release_prefixes = [_][]const u8{
+pub const release_prefixes_default = [_][]const u8{
     "close",
     "free",
     "destroy",
@@ -75,7 +75,7 @@ pub const default_release_prefixes = [_][]const u8{
 };
 
 /// The last-name endings a call releases something by, unless the configuration names others.
-pub const default_release_suffixes = [_][]const u8{
+pub const release_suffixes_default = [_][]const u8{
     "deinit",
     "_close",
     "_free",
@@ -93,9 +93,9 @@ pub const Config = struct {
     acquire_suffixes: []const []const u8 = &.{},
     /// A call whose last segment starts with one of these releases what it names. Empty, with
     /// `release_suffixes`, reads every statement under the acquire.
-    release_prefixes: []const []const u8 = &default_release_prefixes,
+    release_prefixes: []const []const u8 = &release_prefixes_default,
     /// A call whose last segment ends with one of these releases what it names.
-    release_suffixes: []const []const u8 = &default_release_suffixes,
+    release_suffixes: []const []const u8 = &release_suffixes_default,
     /// When set, a value a `return` under the acquire names is passed: the caller owns it.
     pass_returned: bool = true,
     /// When set, `slot.* = try open_socket()` is read as an acquire of `slot`, beside
@@ -146,7 +146,7 @@ fn check_file(comptime config: Config, context: *report.Context, file: report.Fi
 /// block, and those above the statement it sits inside in every block above that. Each releases
 /// whatever it names however its own block ends, so each protects an acquire under it.
 const Registered = struct {
-    expressions: [max_registered_defers]Node.Index = undefined,
+    expressions: [registered_defers_max]Node.Index = undefined,
     count: usize = 0,
     /// Set when a block registers more defers than `expressions` holds. Every acquire under it
     /// then reads as released, which is the safe direction.
@@ -193,7 +193,7 @@ fn Walker(comptime config: Config) type {
         pub fn child(self: *@This(), node: Node.Index) void {
             self.depth += 1;
             defer self.depth -= 1;
-            std.debug.assert(self.depth <= ast.max_tree_depth);
+            std.debug.assert(self.depth <= ast.tree_depth_max);
             visit(config, self, node) catch |failure| {
                 self.failure = failure;
             };
@@ -288,7 +288,7 @@ fn check_acquire(
 /// The most defers `Registered` holds at once: the defers of one block and of every block above
 /// it. A block that registers more makes the stack read as releasing everything, so the limit
 /// costs findings and never invents one.
-pub const max_registered_defers: usize = 64;
+pub const registered_defers_max: usize = 64;
 
 /// The target that binds nothing. `_ = try open_socket()` acquires and discards in one statement,
 /// and no defer can release what has no name, so it is no acquire.
@@ -296,7 +296,7 @@ const discard_target = "_";
 
 /// How far `assigned_root` walks down an assignment's target before it gives up: `a.b.c.*` is
 /// four. A target nested deeper is read as no acquire at all.
-const max_target_depth: usize = 16;
+const target_depth_max: usize = 16;
 
 /// The name a statement acquires: the name `const name = try <acquire>(...)` binds, or, when the
 /// configuration reads assignments, the root of the target of `<target> = try <acquire>(...)`.
@@ -329,7 +329,7 @@ fn assigned_name(comptime config: Config, tree: *const Ast, statement: Node.Inde
 /// null when the target is the discard or any other expression, such as `slots[index]`.
 fn assigned_root(comptime config: Config, tree: *const Ast, target: Node.Index) ?[]const u8 {
     var node = target;
-    for (0..max_target_depth) |_| {
+    for (0..target_depth_max) |_| {
         switch (tree.nodeTag(node)) {
             .identifier => return named_root(tree.tokenSlice(tree.nodeMainToken(node))),
             .deref => node = tree.nodeData(node).node,
@@ -354,7 +354,7 @@ fn is_acquire(comptime config: Config, tree: *const Ast, expression: Node.Index)
     if (tree.nodeTag(expression) != .@"try") return false;
     const call = tree.nodeData(expression).node;
     if (!ast.is_call(tree.nodeTag(call))) return false;
-    var buffer: [ast.max_chain_bytes]u8 = undefined;
+    var buffer: [ast.chain_len_max]u8 = undefined;
     const chain = ast.chain_text(tree, ast.callee(tree, call), &buffer) orelse return false;
     return named_by(ast.last_segment(chain), config.acquire_prefixes, config.acquire_suffixes);
 }
@@ -448,7 +448,7 @@ fn Search(comptime config: Config, comptime State: type) type {
         pub fn child(self: *@This(), node: Node.Index) void {
             self.depth += 1;
             defer self.depth -= 1;
-            std.debug.assert(self.depth <= ast.max_tree_depth);
+            std.debug.assert(self.depth <= ast.tree_depth_max);
             self.state.note(self.tree, node);
             ast.for_each_child_reading(self.tree, node, config.parameter_types, self);
         }
@@ -463,7 +463,7 @@ fn Releases(comptime config: Config) type {
 
         fn note(self: *@This(), tree: *const Ast, node: Node.Index) void {
             if (!ast.is_call(tree.nodeTag(node))) return;
-            var buffer: [ast.max_chain_bytes]u8 = undefined;
+            var buffer: [ast.chain_len_max]u8 = undefined;
             const callee = ast.callee(tree, node);
             const chain = ast.chain_text(tree, callee, &buffer) orelse return;
             const last = ast.last_segment(chain);

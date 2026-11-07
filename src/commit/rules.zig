@@ -6,15 +6,15 @@
 //!     end with a period, and is imperative. A first word ending in `ed` or `ing`, or one of
 //!     `third_person_forms`, is not imperative unless it is one of `imperative_exceptions`. The
 //!     four checks report separately, so a subject that breaks two of them says so twice.
-//!  3. subject-length: the whole subject line is at most `max_subject_columns` columns.
+//!  3. subject-length: the whole subject line is at most `subject_columns_max` columns.
 //!  4. scope-known: when `known_scopes` is set, a well-formed scope outside it draws a finding of
 //!     `unknown_scope_severity`. The grammar of rule 1 accepts any well-formed scope, so a project
 //!     whose scope list grows with its code can warn on a new scope rather than refuse it.
 //!  5. body-separation: when a body exists, exactly one blank line sits between it and the subject.
-//!  6. body-line-length: every body line is at most `max_body_columns` columns.
-//!  7. body-size: the body is at most `max_body_paragraphs` paragraphs and `max_body_words` words.
+//!  6. body-line-length: every body line is at most `body_columns_max` columns.
+//!  7. body-size: the body is at most `body_paragraphs_max` paragraphs and `body_words_max` words.
 //!  8. whitespace: no line ends in whitespace, and the message ends with at most
-//!     `max_trailing_blank_lines` blank lines.
+//!     `trailing_blank_lines_max` blank lines.
 //!
 //! Rule 3 reads the subject and nothing else. Rules 5, 6 and 7 read the body with the trailer
 //! block left out, so a `Co-Authored-By` line is neither a body line nor a body word, and no column
@@ -127,7 +127,7 @@ fn check_subject_length(
     message: *const Message,
 ) !void {
     const width = message_model.columns(message.subject);
-    const limit = config.max_subject_columns;
+    const limit = config.subject_columns_max;
     if (width <= limit) return;
     const format = "the subject is {d} columns, over the {d}-column limit";
     try findings.add(source, subject_length_rule, format, .{ width, limit });
@@ -178,7 +178,7 @@ fn check_body_line_length(
     source: []const u8,
     message: *const Message,
 ) !void {
-    const limit = config.max_body_columns;
+    const limit = config.body_columns_max;
     for (message.body_lines(), 0..) |line, index| {
         const width = message_model.columns(line);
         if (width <= limit) continue;
@@ -198,13 +198,13 @@ fn check_body_size(
 ) !void {
     const body = message.body_lines();
     const paragraphs = message_model.count_paragraphs(body);
-    const paragraph_limit = config.max_body_paragraphs;
+    const paragraph_limit = config.body_paragraphs_max;
     if (paragraphs > paragraph_limit) {
         const format = "the body has {d} paragraphs, over the limit of {d}";
         try findings.add(source, body_size_rule, format, .{ paragraphs, paragraph_limit });
     }
     const words = message_model.count_words(body);
-    const word_limit = config.max_body_words;
+    const word_limit = config.body_words_max;
     if (words > word_limit) {
         const format = "the body has {d} words, over the limit of {d}";
         try findings.add(source, body_size_rule, format, .{ words, word_limit });
@@ -224,7 +224,7 @@ fn check_whitespace(
         try findings.add(source, whitespace_rule, "line {d} ends with whitespace", .{index + 1});
     }
     const blanks = message_model.count_trailing_blank_lines(message.lines);
-    const limit = config.max_trailing_blank_lines;
+    const limit = config.trailing_blank_lines_max;
     if (blanks > limit) {
         const format = "the message ends with {d} blank lines, over the limit of {d}";
         try findings.add(source, whitespace_rule, format, .{ blanks, limit });

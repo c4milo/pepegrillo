@@ -1,7 +1,7 @@
 //! magic-numbers: a limit is named in a constant, never written inline.
 //!
 //! Over every Zig file in `scope`, the rule reports every integer literal whose value is greater
-//! than `largest_allowed_literal`, as written, with `integer literal <literal>`. A literal too
+//! than `literal_max`, as written, with `integer literal <literal>`. A literal too
 //! large for `u64` is reported too. A float literal is not an integer and is not reported. The
 //! literal is reported wherever it appears, an array length `[4]u8`, a shift `1 << 3`, a hex or
 //! underscored literal, with three exceptions:
@@ -25,7 +25,7 @@ const Scope = @import("../scope.zig").Scope;
 
 /// The largest literal a configuration allows when it names none: 0 and 1 are structure, not
 /// limits.
-pub const default_largest_allowed_literal: u64 = 1;
+pub const literal_max_default: u64 = 1;
 
 pub const ParameterTypes = ast.ParameterTypes;
 
@@ -35,7 +35,7 @@ pub const Config = struct {
     /// The files the rule reads. A project exempts its constants files here.
     scope: Scope,
     /// The largest integer literal that needs no name.
-    largest_allowed_literal: u64 = default_largest_allowed_literal,
+    literal_max: u64 = literal_max_default,
     /// Whether the inside of a `test` block is left unread.
     skip_test_blocks: bool = true,
     /// Whether the inside of a `comptime` block is left unread.
@@ -76,7 +76,7 @@ const Visitor = struct {
     pub fn child(self: *Visitor, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         self.visit(node) catch |failure| {
             self.failure = failure;
         };
@@ -118,7 +118,7 @@ const Visitor = struct {
 
     fn check_literal(self: *Visitor, node: Node.Index) !void {
         const literal = self.tree.tokenSlice(self.tree.nodeMainToken(node));
-        if (!is_magic(literal, self.config.largest_allowed_literal)) return;
+        if (!is_magic(literal, self.config.literal_max)) return;
         const location = ast.node_location(self.tree, node);
         try self.findings.add(
             self.config.name,
@@ -148,10 +148,10 @@ fn is_whole_literal(tree: *const Ast, value: Node.OptionalIndex) bool {
     };
 }
 
-/// True for an integer literal over `largest_allowed_literal`, including one too large for u64.
-fn is_magic(literal: []const u8, largest_allowed_literal: u64) bool {
+/// True for an integer literal over `literal_max`, including one too large for u64.
+fn is_magic(literal: []const u8, literal_max: u64) bool {
     return switch (std.zig.number_literal.parseNumberLiteral(literal)) {
-        .int => |value| value > largest_allowed_literal,
+        .int => |value| value > literal_max,
         .big_int => true,
         .float, .failure => false,
     };

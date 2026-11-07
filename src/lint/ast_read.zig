@@ -11,7 +11,7 @@ const Node = Ast.Node;
 
 /// The longest chain `chain_text` writes, which bounds the buffer a caller owns. A longer chain
 /// is reported as no chain at all, which every caller treats as "not a match".
-pub const max_chain_bytes: usize = 256;
+pub const chain_len_max: usize = 256;
 
 /// 1-based line and column of a token.
 pub const Location = struct {
@@ -39,7 +39,7 @@ pub fn node_start_location(tree: *const Ast, node: Node.Index) Location {
 /// field accesses over one, such as `std.time.nanoTimestamp`, and returns it. Returns null for
 /// any other expression, so `a().b` and `a[0].b` are not chains, and for a chain longer than the
 /// buffer.
-pub fn chain_text(tree: *const Ast, node: Node.Index, buffer: *[max_chain_bytes]u8) ?[]const u8 {
+pub fn chain_text(tree: *const Ast, node: Node.Index, buffer: *[chain_len_max]u8) ?[]const u8 {
     var length: usize = 0;
     var current = node;
     while (tree.nodeTag(current) == .field_access) {
@@ -50,18 +50,18 @@ pub fn chain_text(tree: *const Ast, node: Node.Index, buffer: *[max_chain_bytes]
     if (tree.nodeTag(current) != .identifier) return null;
     const root = tree.tokenSlice(tree.nodeMainToken(current));
     length = prepend_segment(buffer, length, root) orelse return null;
-    return buffer[max_chain_bytes - length ..];
+    return buffer[chain_len_max - length ..];
 }
 
 /// The chain is built right to left, so each segment goes in front of the ones already written,
 /// at the end of the buffer, with a dot between it and them. Returns the new length, or null
 /// when the segment does not fit.
-fn prepend_segment(buffer: *[max_chain_bytes]u8, length: usize, segment: []const u8) ?usize {
+fn prepend_segment(buffer: *[chain_len_max]u8, length: usize, segment: []const u8) ?usize {
     const with_dot = length != 0;
     const dot_bytes: usize = if (with_dot) 1 else 0;
     const new_length = length + segment.len + dot_bytes;
-    if (new_length > max_chain_bytes) return null;
-    const start = max_chain_bytes - new_length;
+    if (new_length > chain_len_max) return null;
+    const start = chain_len_max - new_length;
     @memcpy(buffer[start .. start + segment.len], segment);
     if (with_dot) buffer[start + segment.len] = '.';
     return new_length;
@@ -158,36 +158,36 @@ const testing = std.testing;
 
 /// Parses `const x = EXPRESSION;` and returns the chain text of the expression, copied into `out`
 /// so it outlives the tree.
-fn chain_of(expression: []const u8, out: *[max_chain_bytes]u8) !?[]const u8 {
-    var source_buffer: [max_chain_bytes * 2]u8 = undefined;
+fn chain_of(expression: []const u8, out: *[chain_len_max]u8) !?[]const u8 {
+    var source_buffer: [chain_len_max * 2]u8 = undefined;
     const source = try std.fmt.bufPrintZ(&source_buffer, "const x = {s};", .{expression});
     var tree = try Ast.parse(testing.allocator, source, .zig);
     defer tree.deinit(testing.allocator);
     const declaration = tree.rootDecls()[0];
     const value = tree.nodeData(declaration).opt_node_and_opt_node[1].unwrap().?;
-    var buffer: [max_chain_bytes]u8 = undefined;
+    var buffer: [chain_len_max]u8 = undefined;
     const chain = chain_text(&tree, value, &buffer) orelse return null;
     @memcpy(out[0..chain.len], chain);
     return out[0..chain.len];
 }
 
 test "chain_text joins an identifier and its field accesses" {
-    var out: [max_chain_bytes]u8 = undefined;
+    var out: [chain_len_max]u8 = undefined;
     try testing.expectEqualStrings("std", (try chain_of("std", &out)).?);
     const chain = "std.heap.page_allocator";
     try testing.expectEqualStrings(chain, (try chain_of(chain, &out)).?);
 }
 
 test "chain_text returns null for a call, an index, or a literal in the chain" {
-    var out: [max_chain_bytes]u8 = undefined;
+    var out: [chain_len_max]u8 = undefined;
     try testing.expectEqual(null, try chain_of("a().b", &out));
     try testing.expectEqual(null, try chain_of("a[0].b", &out));
     try testing.expectEqual(null, try chain_of("1", &out));
 }
 
 test "chain_text returns null for a chain longer than the buffer" {
-    const long_name = "a" ** (max_chain_bytes + 1);
-    var out: [max_chain_bytes]u8 = undefined;
+    const long_name = "a" ** (chain_len_max + 1);
+    var out: [chain_len_max]u8 = undefined;
     try testing.expectEqual(null, try chain_of(long_name, &out));
 }
 
@@ -225,7 +225,7 @@ test "token_location is 1-based" {
 }
 
 /// Returns the imported path of the first root declaration's value.
-fn import_of(source: [:0]const u8, out: *[max_chain_bytes]u8) !?[]const u8 {
+fn import_of(source: [:0]const u8, out: *[chain_len_max]u8) !?[]const u8 {
     var tree = try Ast.parse(testing.allocator, source, .zig);
     defer tree.deinit(testing.allocator);
     const declaration = tree.rootDecls()[0];
@@ -236,7 +236,7 @@ fn import_of(source: [:0]const u8, out: *[max_chain_bytes]u8) !?[]const u8 {
 }
 
 test "imported_path reads the literal of @import and nothing else" {
-    var out: [max_chain_bytes]u8 = undefined;
+    var out: [chain_len_max]u8 = undefined;
     try testing.expectEqualStrings("core", (try import_of("const a = @import(\"core\");", &out)).?);
     try testing.expectEqual(null, try import_of("const a = @embedFile(\"x.bin\");", &out));
     try testing.expectEqual(null, try import_of("const a = @import(module_name);", &out));

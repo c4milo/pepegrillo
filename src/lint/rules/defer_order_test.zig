@@ -111,10 +111,10 @@ test "a deferred expression that names nothing releases nothing and is passed" {
 }
 
 /// The arguments of a call that, with its callee, names one identifier more than
-/// `max_deferred_identifiers` holds.
+/// `deferred_identifiers_max` holds.
 const many_names = blk: {
     var text: []const u8 = "a0";
-    for (1..ast.max_deferred_identifiers) |index| {
+    for (1..ast.deferred_identifiers_max) |index| {
         text = text ++ std.fmt.comptimePrint(", a{d}", .{index});
     }
     break :blk text;

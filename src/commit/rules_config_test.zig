@@ -135,24 +135,24 @@ fn with_limits(comptime base: Config, comptime limits: anytype) Config {
     return config;
 }
 
-test "max_subject_columns is the subject limit" {
-    const config = comptime with_limits(letters, .{ .max_subject_columns = 20 });
+test "subject_columns_max is the subject limit" {
+    const config = comptime with_limits(letters, .{ .subject_columns_max = 20 });
     try expect_findings_with(config, "feat: " ++ ("w" ** 14) ++ "\n", &.{});
     try expect_findings_with(config, "feat: " ++ ("w" ** 15) ++ "\n", &.{
         "violation: subject-length: the subject is 21 columns, over the 20-column limit",
     });
 }
 
-test "max_body_columns is the body line limit" {
-    const config = comptime with_limits(letters, .{ .max_body_columns = 10 });
+test "body_columns_max is the body line limit" {
+    const config = comptime with_limits(letters, .{ .body_columns_max = 10 });
     try expect_findings_with(config, "feat: add x\n\n" ++ ("w" ** 10) ++ "\n", &.{});
     try expect_findings_with(config, "feat: add x\n\n" ++ ("w" ** 11) ++ "\n", &.{
         "violation: body-line-length: line 3 is 11 columns, over the 10-column limit",
     });
 }
 
-test "max_body_paragraphs and max_body_words are the body size limits" {
-    const limits = .{ .max_body_paragraphs = 1, .max_body_words = 3 };
+test "body_paragraphs_max and body_words_max are the body size limits" {
+    const limits = .{ .body_paragraphs_max = 1, .body_words_max = 3 };
     const config = comptime with_limits(letters, limits);
     try expect_findings_with(config, "feat: add x\n\none two three\n", &.{});
     try expect_findings_with(config, "feat: add x\n\none two\n\nthree four\n", &.{
@@ -161,23 +161,23 @@ test "max_body_paragraphs and max_body_words are the body size limits" {
     });
 }
 
-test "max_trailing_blank_lines is the trailing blank line limit" {
-    const config = comptime with_limits(letters, .{ .max_trailing_blank_lines = 0 });
+test "trailing_blank_lines_max is the trailing blank line limit" {
+    const config = comptime with_limits(letters, .{ .trailing_blank_lines_max = 0 });
     try expect_findings_with(config, "feat: add x\n", &.{});
     try expect_findings_with(config, "feat: add x\n\n", &.{
         "violation: whitespace: the message ends with 1 blank lines, over the limit of 0",
     });
 }
 
-test "max_findings is the finding cap of one run" {
+test "findings_max is the finding cap of one run" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const text = "feat: Add x.\n";
     const message = try message_model.parse(arena, text, letters.trailer_keys, 8);
-    var one: Findings = .{ .arena = arena, .max_findings = 1 };
+    var one: Findings = .{ .arena = arena, .findings_max = 1 };
     try testing.expectError(error.TooManyFindings, rules.check_all(letters, &one, "a", &message));
-    var two: Findings = .{ .arena = arena, .max_findings = 2 };
+    var two: Findings = .{ .arena = arena, .findings_max = 2 };
     try rules.check_all(letters, &two, "a", &message);
     try testing.expectEqual(2, two.count());
 }

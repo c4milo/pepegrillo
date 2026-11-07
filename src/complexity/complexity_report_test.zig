@@ -18,15 +18,15 @@ test "parse_arguments reads --max, --list and the paths, and defaults to 15 with
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const options = try parse_arguments(arena, &.{ "--max", "20", "--list", "src", "tools" });
-    try testing.expectEqual(20, options.max_score);
+    try testing.expectEqual(20, options.score_max);
     try testing.expect(options.list);
     try testing.expectEqual(2, options.paths.len);
     try testing.expectEqualStrings("src", options.paths[0]);
     try testing.expectEqualStrings("tools", options.paths[1]);
 
     const defaults = try parse_arguments(arena, &.{"src"});
-    try testing.expectEqual(report.default_max_score, defaults.max_score);
-    try testing.expectEqual(15, defaults.max_score);
+    try testing.expectEqual(report.score_max_default, defaults.score_max);
+    try testing.expectEqual(15, defaults.score_max);
     try testing.expect(!defaults.list);
 }
 
@@ -62,7 +62,7 @@ test "a declaration over the threshold is named and the status is 1" {
     const text, const status = try run_report(arena_state.allocator(), &.{
         .{ .path = "src/store/page.zig", .line = 12, .column = 4, .name = "parse", .score = 9 },
         .{ .path = "src/store/page.zig", .line = 40, .column = 4, .name = "write", .score = 2 },
-    }, .{ .max_score = 3 });
+    }, .{ .score_max = 3 });
     try testing.expectEqual(report.exit_findings, status);
     try testing.expectEqualStrings(
         \\src/store/page.zig:12:4: error: [cognitive-complexity] parse scored 9 (max 3)
@@ -113,7 +113,7 @@ test "over the boundary fixture 16 fails at the default threshold and passes at 
     try testing.expect(std.mem.startsWith(u8, text, "src/store/page.zig:17:"));
     const line = ": error: [cognitive-complexity] sixteen scored 16 (max 15)\n";
     try testing.expect(std.mem.indexOf(u8, text, line) != null);
-    _, const passing = try run_report(arena, scores, .{ .max_score = 16 });
+    _, const passing = try run_report(arena, scores, .{ .score_max = 16 });
     try testing.expectEqual(report.exit_clean, passing);
 }
 
@@ -125,7 +125,7 @@ test "--list prints every declaration highest first, and notes the ones under th
         .{ .path = "src/store/a.zig", .line = 5, .column = 1, .name = "low", .score = 0 },
         .{ .path = "src/store/a.zig", .line = 8, .column = 1, .name = "tied_first", .score = 3 },
         .{ .path = "src/store/b.zig", .line = 1, .column = 1, .name = "high", .score = 7 },
-    }, .{ .max_score = 5, .list = true });
+    }, .{ .score_max = 5, .list = true });
     try testing.expectEqual(report.exit_findings, status);
     try testing.expectEqualStrings(
         \\src/store/b.zig:1:1: error: [cognitive-complexity] high scored 7 (max 5)
@@ -180,7 +180,7 @@ fn write_walk_fixture(dir: Io.Dir) !void {
     try dir.writeFile(io, .{ .sub_path = "src/store/page.zig.orig", .data = "fn ( {\n" });
     for (report.skipped_directories) |skipped| {
         try dir.createDirPath(io, skipped);
-        var path_buffer: [report.max_path_bytes]u8 = undefined;
+        var path_buffer: [report.path_len_max]u8 = undefined;
         const path = try std.fmt.bufPrint(&path_buffer, "{s}/skipped.zig", .{skipped});
         try dir.writeFile(io, .{ .sub_path = path, .data = source });
     }
@@ -196,7 +196,7 @@ test "the walk scores Zig files under the root and reports a file that does not 
     var run: Report = .{ .arena = arena_state.allocator(), .io = testing.io };
     // Files are read through the joined path, relative to the working directory, where
     // `testing.tmpDir` creates the directory. The trailing separator is dropped by the join.
-    var root_buffer: [report.max_path_bytes]u8 = undefined;
+    var root_buffer: [report.path_len_max]u8 = undefined;
     const root = try std.fmt.bufPrint(&root_buffer, ".zig-cache/tmp/{s}/", .{tmp.sub_path});
     try run.walk_directory(tmp.dir, root);
 
@@ -216,7 +216,7 @@ test "lint_path scores a single file and returns the error of a missing path" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "page.zig", .data = "fn f() void {}\n" });
-    var path_buffer: [report.max_path_bytes]u8 = undefined;
+    var path_buffer: [report.path_len_max]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, ".zig-cache/tmp/{s}/page.zig", .{tmp.sub_path});
 
     var run: Report = .{ .arena = arena_state.allocator(), .io = testing.io };
@@ -225,7 +225,7 @@ test "lint_path scores a single file and returns the error of a missing path" {
     try testing.expectError(error.FileNotFound, run.lint_path(".zig-cache/tmp/no-such/page.zig"));
 }
 
-test "a path longer than max_path_bytes is reported as not scored" {
+test "a path longer than path_len_max is reported as not scored" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     var tmp = testing.tmpDir(.{ .iterate = true });
@@ -233,7 +233,7 @@ test "a path longer than max_path_bytes is reported as not scored" {
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "page.zig", .data = "fn f() void {}\n" });
 
     var run: Report = .{ .arena = arena_state.allocator(), .io = testing.io };
-    const long_root = "r" ** report.max_path_bytes;
+    const long_root = "r" ** report.path_len_max;
     try run.walk_directory(tmp.dir, long_root);
     try testing.expectEqual(0, run.files_seen);
     try testing.expectEqual(1, run.unscored.items.len);
@@ -241,17 +241,17 @@ test "a path longer than max_path_bytes is reported as not scored" {
     try testing.expectEqualStrings("PathTooLong", run.unscored.items[0].reason);
 }
 
-test "a file past max_files_per_run ends the run with an error" {
+test "a file past files_per_run_max ends the run with an error" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "page.zig", .data = "fn f() void {}\n" });
-    var path_buffer: [report.max_path_bytes]u8 = undefined;
+    var path_buffer: [report.path_len_max]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, ".zig-cache/tmp/{s}/page.zig", .{tmp.sub_path});
 
     var run: Report = .{ .arena = arena_state.allocator(), .io = testing.io };
-    run.files_seen = report.max_files_per_run - 1;
+    run.files_seen = report.files_per_run_max - 1;
     try run.lint_path(path);
     try testing.expectEqual(1, run.scores.items.len);
     try testing.expectError(error.TooManyFiles, run.lint_path(path));

@@ -46,7 +46,7 @@ pub const Finding = struct {
 pub const Findings = struct {
     arena: Allocator,
     /// Findings one run may record. One more is an error, never a dropped finding.
-    max_findings: usize,
+    findings_max: usize,
     items: std.ArrayList(Finding) = .empty,
 
     /// Records a finding that refuses the commit.
@@ -79,7 +79,7 @@ pub const Findings = struct {
         comptime format: []const u8,
         arguments: anytype,
     ) !void {
-        if (self.items.items.len >= self.max_findings) return error.TooManyFindings;
+        if (self.items.items.len >= self.findings_max) return error.TooManyFindings;
         try self.items.append(self.arena, .{
             .source = try self.arena.dupe(u8, source),
             .severity = severity,
@@ -116,12 +116,12 @@ pub const Findings = struct {
 const testing = std.testing;
 
 /// The cap the tests below give a `Findings`, small enough to reach.
-const test_max_findings: usize = 2;
+const test_findings_max: usize = 2;
 
 test "write prints source, severity, rule and message in the order recorded" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
-    var findings: Findings = .{ .arena = arena_state.allocator(), .max_findings = 4 };
+    var findings: Findings = .{ .arena = arena_state.allocator(), .findings_max = 4 };
     try findings.add("abc1234", "subject-format", "the type is {s}", .{"wrong"});
     try findings.warn("abc1234", "scope-known", "the scope is {s}", .{"new"});
     var buffer: [256]u8 = undefined;
@@ -137,7 +137,7 @@ test "write prints source, severity, rule and message in the order recorded" {
 test "count_violations counts violations and leaves warnings out" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
-    var findings: Findings = .{ .arena = arena_state.allocator(), .max_findings = 4 };
+    var findings: Findings = .{ .arena = arena_state.allocator(), .findings_max = 4 };
     try findings.warn("a", "scope-known", "w", .{});
     try testing.expectEqual(1, findings.count());
     try testing.expectEqual(0, findings.count_violations());
@@ -146,13 +146,13 @@ test "count_violations counts violations and leaves warnings out" {
     try testing.expectEqual(1, findings.count_violations());
 }
 
-test "a finding past max_findings is an error, never dropped" {
+test "a finding past findings_max is an error, never dropped" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var findings: Findings = .{ .arena = arena, .max_findings = test_max_findings };
+    var findings: Findings = .{ .arena = arena, .findings_max = test_findings_max };
     try findings.add("a", "whitespace", "one", .{});
     try findings.add("a", "whitespace", "two", .{});
     try testing.expectError(error.TooManyFindings, findings.add("a", "whitespace", "three", .{}));
-    try testing.expectEqual(test_max_findings, findings.count());
+    try testing.expectEqual(test_findings_max, findings.count());
 }

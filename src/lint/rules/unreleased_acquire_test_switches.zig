@@ -164,7 +164,7 @@ test "a declaration acquire cannot be released by a defer above it" {
 /// One defer more than the stack of defers in effect holds, none of them naming the acquire.
 const crowding_defers = blk: {
     var text: []const u8 = "";
-    for (0..unreleased_acquire.max_registered_defers + 1) |index| {
+    for (0..unreleased_acquire.registered_defers_max + 1) |index| {
         text = text ++ std.fmt.comptimePrint("    defer t{d}();\n", .{index});
     }
     break :blk text;

@@ -200,8 +200,8 @@ test "a body nested 65 levels deep is scored" {
 }
 
 /// Nesting in the two sources past the tree depth. Each level is at least one AST node, so the
-/// tree is deeper than `max_tree_depth` whatever else it holds.
-const too_deep_levels = scorer.max_tree_depth + 88;
+/// tree is deeper than `tree_depth_max` whatever else it holds.
+const too_deep_levels = scorer.tree_depth_max + 88;
 
 test "a file nested past the tree depth outside any function is reported, not scored" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
@@ -229,16 +229,16 @@ test "the scorer stops at the tree depth when it walks a body on its own" {
     try testing.expect(too_deep);
 }
 
-/// One function declaration, repeated to build a file at and past `max_functions_per_file`.
+/// One function declaration, repeated to build a file at and past `functions_per_file_max`.
 const one_function = "fn f() void {}\n";
 
-test "a file past max_functions_per_file is reported, and a file at it is scored" {
+test "a file past functions_per_file_max is reported, and a file at it is scored" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const at_limit = one_function ** scorer.max_functions_per_file;
+    const at_limit = one_function ** scorer.functions_per_file_max;
     const scores = try score_source(arena, "src/store/page.zig", at_limit);
-    try testing.expectEqual(scorer.max_functions_per_file, scores.len);
+    try testing.expectEqual(scorer.functions_per_file_max, scores.len);
     try testing.expectError(
         error.TooManyFunctions,
         score_source(arena, "src/store/page.zig", at_limit ++ one_function),

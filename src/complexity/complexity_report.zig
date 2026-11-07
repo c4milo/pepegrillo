@@ -16,16 +16,16 @@ pub const score_rule_name = "cognitive-complexity";
 pub const unscored_rule_name = "not-scored";
 
 /// Threshold applied when `--max` is absent: a score of 15 passes and 16 fails.
-pub const default_max_score: u32 = 15;
+pub const score_max_default: u32 = 15;
 
 /// Largest source file the tool reads. A larger one is reported as not scored.
-pub const max_source_bytes: usize = 4 * 1024 * 1024;
+pub const source_len_max: usize = 4 * 1024 * 1024;
 
 /// Longest path the walk builds. A longer one is reported as not scored.
-pub const max_path_bytes: usize = 4096;
+pub const path_len_max: usize = 4096;
 
 /// Files read per run across every PATH. One more ends the run with `error.TooManyFiles`.
-pub const max_files_per_run: usize = 65536;
+pub const files_per_run_max: usize = 65536;
 
 /// Directories the walk does not enter: build output and version control, never hand-written.
 pub const skipped_directories = [_][]const u8{ ".zig-cache", "zig-out", ".git" };
@@ -41,7 +41,7 @@ const max_flag = "--max";
 const list_flag = "--list";
 
 pub const Options = struct {
-    max_score: u32 = default_max_score,
+    score_max: u32 = score_max_default,
     /// Print every declaration, highest score first, instead of only those over the threshold.
     list: bool = false,
     paths: []const []const u8 = &.{},
@@ -61,7 +61,7 @@ pub fn parse_arguments(arena: Allocator, arguments: []const []const u8) Argument
         if (std.mem.eql(u8, argument, max_flag)) {
             index += 1;
             if (index >= arguments.len) return error.MissingValue;
-            options.max_score = std.fmt.parseInt(u32, arguments[index], 10) catch {
+            options.score_max = std.fmt.parseInt(u32, arguments[index], 10) catch {
                 return error.BadValue;
             };
         } else if (std.mem.eql(u8, argument, list_flag)) {
@@ -117,7 +117,7 @@ pub const Report = struct {
     pub fn walk_directory(self: *Report, dir: Io.Dir, root: []const u8) !void {
         var walker = try dir.walkSelectively(self.arena);
         defer walker.deinit();
-        var path_buffer: [max_path_bytes]u8 = undefined;
+        var path_buffer: [path_len_max]u8 = undefined;
         while (try walker.next(self.io)) |entry| {
             switch (entry.kind) {
                 .directory => if (!is_skipped_directory(entry.basename)) {
@@ -137,12 +137,12 @@ pub const Report = struct {
 
     fn lint_file(self: *Report, path: []const u8) !void {
         self.files_seen += 1;
-        if (self.files_seen > max_files_per_run) return error.TooManyFiles;
+        if (self.files_seen > files_per_run_max) return error.TooManyFiles;
         const source = Io.Dir.cwd().readFileAllocOptions(
             self.io,
             path,
             self.arena,
-            .limited(max_source_bytes),
+            .limited(source_len_max),
             .of(u8),
             0,
         ) catch |failure| return self.record_unscored(path, @errorName(failure));
@@ -206,7 +206,7 @@ pub fn print_report(out: *Io.Writer, report: *Report, options: Options) !u8 {
     var highest: u32 = 0;
     for (scores) |scored| {
         highest = @max(highest, scored.score);
-        const over = scored.score > options.max_score;
+        const over = scored.score > options.score_max;
         if (over) violations += 1;
         if (!over and !options.list) continue;
         const location: report_line.Location = .{
@@ -216,7 +216,7 @@ pub fn print_report(out: *Io.Writer, report: *Report, options: Options) !u8 {
         const severity: report_line.Severity = if (over) .@"error" else .note;
         const message = "{s} scored {d} (max {d})";
         try report_line.write(out, location, severity, score_rule_name, message, .{
-            scored.name, scored.score, options.max_score,
+            scored.name, scored.score, options.score_max,
         });
     }
     const unscored = report.unscored.items;
@@ -230,7 +230,7 @@ pub fn print_report(out: *Io.Writer, report: *Report, options: Options) !u8 {
         .highest = highest,
         .violations = violations,
         .unscored = unscored.len,
-        .max_score = options.max_score,
+        .score_max = options.score_max,
     });
 }
 
@@ -239,13 +239,13 @@ const Totals = struct {
     highest: u32,
     violations: usize,
     unscored: usize,
-    max_score: u32,
+    score_max: u32,
 };
 
 fn print_summary(out: *Io.Writer, totals: Totals) !u8 {
     if (totals.violations == 0 and totals.unscored == 0) {
         try out.print("cognitive-complexity: {d} functions scored, highest {d} (max {d})\n", .{
-            totals.scored, totals.highest, totals.max_score,
+            totals.scored, totals.highest, totals.score_max,
         });
         try out.flush();
         return exit_clean;

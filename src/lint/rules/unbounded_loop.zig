@@ -78,7 +78,7 @@ pub const Messages = struct {
 };
 
 /// The last names check 3 reads as a length read unless the configuration names others.
-pub const default_length_reader_names = [_][]const u8{
+pub const length_reader_names_default = [_][]const u8{
     "remaining",
     "len",
     "size",
@@ -101,7 +101,7 @@ pub const Config = struct {
     /// What names a bound, for check 1 under `.unless_bounded_break` and for check 3.
     bound: Bound = .{},
     /// The last names of a length read, for check 3.
-    length_reader_names: []const []const u8 = &default_length_reader_names,
+    length_reader_names: []const []const u8 = &length_reader_names_default,
     messages: Messages = .{},
     /// Which function parameter types the walk reads. `.simple_prototypes_only` reproduces a
     /// walker that read the parameter types of one-parameter prototypes alone.
@@ -145,7 +145,7 @@ fn Walker(comptime config: Config) type {
         pub fn child(self: *@This(), node: Node.Index) void {
             self.depth += 1;
             defer self.depth -= 1;
-            std.debug.assert(self.depth <= ast.max_tree_depth);
+            std.debug.assert(self.depth <= ast.tree_depth_max);
             visit(config, self, node) catch |failure| {
                 self.failure = failure;
             };
@@ -160,7 +160,7 @@ fn visit(comptime config: Config, walker: *Walker(config), node: Node.Index) !vo
 
 fn visit_while(comptime config: Config, walker: *Walker(config), node: Node.Index) !void {
     const loop = walker.tree.fullWhile(node).?;
-    var buffer: [ast.max_chain_bytes]u8 = undefined;
+    var buffer: [ast.chain_len_max]u8 = undefined;
     if (ast.chain_text(walker.tree, loop.ast.cond_expr, &buffer)) |condition| {
         if (std.mem.eql(u8, condition, forever_condition)) {
             return check_forever(config, walker, node, loop);
@@ -215,7 +215,7 @@ fn check_length_read(
     loop: Ast.full.While,
 ) !void {
     if (scan.scan_loop(walker.tree, loop, config.bound, config.parameter_types).names_bound) return;
-    var buffer: [ast.max_chain_bytes]u8 = undefined;
+    var buffer: [ast.chain_len_max]u8 = undefined;
     const read = scan.length_read_against_literal(
         walker.tree,
         loop.ast.cond_expr,

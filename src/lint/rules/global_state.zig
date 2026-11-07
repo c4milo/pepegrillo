@@ -60,7 +60,7 @@ const Visitor = struct {
     pub fn child(self: *Visitor, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         var buffer: [2]Node.Index = undefined;
         if (self.tree.fullContainerDecl(&buffer, node)) |container| {
             self.check_members(container.ast.members);

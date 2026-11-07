@@ -47,23 +47,23 @@ pub const parse_rule_name = "parse";
 pub const unreadable_rule_name = "unreadable";
 
 /// Longest path the walk builds.
-pub const max_path_bytes: usize = 4096;
+pub const path_len_max: usize = 4096;
 
 /// Files visited per run across every PATH. More is reported as an error.
-const max_files_per_run: usize = 65536;
+const files_per_run_max: usize = 65536;
 
 /// Command-line arguments the tool reads before giving up.
-const max_arguments: usize = 1024;
+const arguments_max: usize = 1024;
 
 /// Bytes buffered for standard output before a flush.
-const output_buffer_bytes: usize = 16 * 1024;
+const output_buffer_len: usize = 16 * 1024;
 
 /// Longest parse error message the tool renders.
-const max_parse_error_bytes: usize = 512;
+const parse_error_len_max: usize = 512;
 
 /// Longest line the tool prints about a file it cannot read: the path, and room for the rule name
 /// and the reason. A longer line is cut, never an error.
-const max_file_error_line_bytes: usize = max_path_bytes + 128;
+const file_error_line_len_max: usize = path_len_max + 128;
 
 /// Directories the walk does not enter: build output and version control, never hand-written.
 const skipped_directories = [_][]const u8{ ".zig-cache", "zig-out", ".git" };
@@ -82,11 +82,11 @@ pub const ArgumentError = error{
 } || Allocator.Error;
 
 /// The most rules one driver dispatches to, which sizes the enabled-rule table.
-pub const max_rules: usize = 32;
+pub const rules_max: usize = 32;
 
 /// Which rules run and which paths are walked, as read from the command line.
 pub const Options = struct {
-    enabled: [max_rules]bool = @splat(true),
+    enabled: [rules_max]bool = @splat(true),
     paths: []const []const u8 = &.{},
 };
 
@@ -135,7 +135,7 @@ fn parse_arguments_for(
     arguments: []const []const u8,
 ) ArgumentError!Options {
     var options: Options = .{};
-    var selected: [max_rules]bool = @splat(false);
+    var selected: [rules_max]bool = @splat(false);
     var any_selected = false;
     var path_list: std.ArrayList([]const u8) = .empty;
     try path_list.ensureTotalCapacity(arena, arguments.len);
@@ -170,7 +170,7 @@ fn rule_index_in(comptime rules: anytype, rule_name: []const u8) ?usize {
 /// One run: the walk, the per-file dispatch, and the counts the exit status is computed from.
 pub const Run = struct {
     context: report.Context,
-    enabled: [max_rules]bool = @splat(true),
+    enabled: [rules_max]bool = @splat(true),
     files_seen: usize = 0,
     file_errors: usize = 0,
     /// Set by the tests so a passing run writes nothing. `main` leaves it false.
@@ -204,7 +204,7 @@ pub const Run = struct {
     ) !void {
         var walker = try dir.walkSelectively(self.context.arena);
         defer walker.deinit();
-        var path_buffer: [max_path_bytes]u8 = undefined;
+        var path_buffer: [path_len_max]u8 = undefined;
         while (try walker.next(self.context.io)) |entry| {
             switch (entry.kind) {
                 .directory => if (!is_skipped_directory(entry.basename)) {
@@ -223,7 +223,7 @@ pub const Run = struct {
 
     fn lint_file(self: *Run, comptime rules: anytype, path: []const u8) !void {
         self.files_seen += 1;
-        if (self.files_seen > max_files_per_run) return error.TooManyFiles;
+        if (self.files_seen > files_per_run_max) return error.TooManyFiles;
         const arena = self.context.arena;
         const source = self.context.read_file(path) orelse {
             return self.file_error(path, "Unreadable");
@@ -252,7 +252,7 @@ pub const Run = struct {
     /// The first parse error, at its token, as the `parse` pseudo-rule.
     fn report_parse_error(self: *Run, path: []const u8, tree: *const Ast) !void {
         const first = tree.errors[0];
-        var message_buffer: [max_parse_error_bytes]u8 = undefined;
+        var message_buffer: [parse_error_len_max]u8 = undefined;
         var writer: Io.Writer = .fixed(&message_buffer);
         tree.renderError(first, &writer) catch {};
         const location = tree.tokenLocation(0, first.token);
@@ -273,7 +273,7 @@ pub const Run = struct {
     fn file_error(self: *Run, path: []const u8, reason: []const u8) void {
         self.file_errors += 1;
         if (self.quiet) return;
-        var line_buffer: [max_file_error_line_bytes]u8 = undefined;
+        var line_buffer: [file_error_line_len_max]u8 = undefined;
         var line: Io.Writer = .fixed(&line_buffer);
         write_file_error(&line, path, reason) catch {};
         std.debug.print("{s}", .{line.buffered()});
@@ -295,7 +295,7 @@ fn print_usage(comptime rules: anytype) void {
 fn run_main(comptime rules: anytype, init: std.process.Init) !void {
     const arena = init.arena.allocator();
     const all_arguments = try init.minimal.args.toSlice(arena);
-    if (all_arguments.len > max_arguments) return error.TooManyArguments;
+    if (all_arguments.len > arguments_max) return error.TooManyArguments;
     const arguments = if (all_arguments.len == 0) all_arguments else all_arguments[1..];
     const options = parse_arguments_for(rules, arena, arguments) catch |failure| {
         std.debug.print("error: {s}\n", .{@errorName(failure)});
@@ -311,7 +311,7 @@ fn run_main(comptime rules: anytype, init: std.process.Init) !void {
     for (options.paths) |path| try run.lint_path(rules, path);
     run.context.findings.sort();
 
-    var output_buffer: [output_buffer_bytes]u8 = undefined;
+    var output_buffer: [output_buffer_len]u8 = undefined;
     // Streaming, not positional: a positional writer starts at offset 0 and overwrites earlier
     // output when standard output is redirected to a file.
     var writer = Io.File.stdout().writerStreaming(init.io, &output_buffer);
@@ -320,11 +320,11 @@ fn run_main(comptime rules: anytype, init: std.process.Init) !void {
     std.process.exit(exit_status(run.context.findings.count(), run.file_errors));
 }
 
-/// Refuses, at compile time, a rule set the driver cannot run: more rules than `max_rules`, a name
+/// Refuses, at compile time, a rule set the driver cannot run: more rules than `rules_max`, a name
 /// that is empty or not lowercase words joined by hyphens, or two rules sharing a name. `--rule`
 /// looks rules up by name and the report prints it.
 fn assert_rule_set(comptime rules: anytype) void {
-    if (rules.len > max_rules) @compileError("more lint rules than max_rules");
+    if (rules.len > rules_max) @compileError("more lint rules than rules_max");
     inline for (rules, 0..) |rule, index| {
         assert_rule_name_shape(rule.name);
         inline for (rules, 0..) |other, other_index| {

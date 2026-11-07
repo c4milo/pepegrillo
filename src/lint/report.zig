@@ -14,10 +14,10 @@ const Ast = std.zig.Ast;
 const report_line = @import("../report_line.zig");
 
 /// Findings recorded per run. One more is reported as an error, never dropped silently.
-pub const max_findings: usize = 1024 * 1024;
+pub const findings_max: usize = 1024 * 1024;
 
 /// A file at or over this size is reported as unreadable rather than linted.
-pub const max_file_bytes: usize = 4 * 1024 * 1024;
+pub const file_len_max: usize = 4 * 1024 * 1024;
 
 pub const Finding = struct {
     path: []const u8,
@@ -52,7 +52,7 @@ pub const Findings = struct {
         comptime format: []const u8,
         arguments: anytype,
     ) !void {
-        if (self.items.items.len >= max_findings) return error.TooManyFindings;
+        if (self.items.items.len >= findings_max) return error.TooManyFindings;
         try self.items.append(self.arena, .{
             .path = try self.arena.dupe(u8, path),
             .line = line,
@@ -109,7 +109,7 @@ pub const Context = struct {
             self.io,
             path,
             self.arena,
-            .limited(max_file_bytes),
+            .limited(file_len_max),
             .of(u8),
             0,
         ) catch null;

@@ -157,10 +157,10 @@ test "magic-numbers skips test and comptime blocks as its switches say" {
     });
 }
 
-test "magic-numbers allows every literal up to largest_allowed_literal" {
+test "magic-numbers allows every literal up to literal_max" {
     const larger: Config = comptime modified: {
         var config = everywhere;
-        config.largest_allowed_literal = 4096;
+        config.literal_max = 4096;
         config.name = "named-limits";
         break :modified config;
     };

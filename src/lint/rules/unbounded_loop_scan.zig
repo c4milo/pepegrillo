@@ -48,9 +48,9 @@ pub const LoopScan = struct {
     pub fn child(self: *LoopScan, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         if (self.tree.nodeTag(node) == .@"break") self.has_break = true;
-        var buffer: [ast.max_chain_bytes]u8 = undefined;
+        var buffer: [ast.chain_len_max]u8 = undefined;
         if (ast.chain_text(self.tree, node, &buffer)) |chain| {
             // A chain holds no break and no further chain, so it is read whole and not descended
             // into.
@@ -89,7 +89,7 @@ pub const BodyScan = struct {
     pub fn child(self: *BodyScan, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         const tag = self.tree.nodeTag(node);
         if (tag == .@"break") self.has_break = true;
         if (tag == .assign_destructure) self.may_change = true;
@@ -101,7 +101,7 @@ pub const BodyScan = struct {
 
     /// An assignment to, or the address of, a chain related to the condition.
     fn note_target(self: *BodyScan, target: Node.Index) void {
-        var buffer: [ast.max_chain_bytes]u8 = undefined;
+        var buffer: [ast.chain_len_max]u8 = undefined;
         const chain = ast.chain_text(self.tree, target, &buffer) orelse return;
         if (is_related(chain, self.condition)) self.may_change = true;
     }
@@ -111,7 +111,7 @@ pub const BodyScan = struct {
     fn note_call(self: *BodyScan, node: Node.Index) void {
         var call_buffer: [1]Node.Index = undefined;
         const call = self.tree.fullCall(&call_buffer, node).?;
-        var buffer: [ast.max_chain_bytes]u8 = undefined;
+        var buffer: [ast.chain_len_max]u8 = undefined;
         if (ast.chain_text(self.tree, call.ast.fn_expr, &buffer)) |callee| {
             const through_field = self.tree.nodeTag(call.ast.fn_expr) == .field_access;
             if (through_field and self.is_condition_root(ast.first_segment(callee))) {
@@ -188,7 +188,7 @@ pub fn length_read_against_literal(
     tree: *const Ast,
     node: Node.Index,
     reader_names: []const []const u8,
-    buffer: *[ast.max_chain_bytes]u8,
+    buffer: *[ast.chain_len_max]u8,
 ) ?[]const u8 {
     if (!is_comparison(tree.nodeTag(node))) return null;
     const left, const right = tree.nodeData(node).node_and_node;
@@ -204,7 +204,7 @@ fn length_read(
     tree: *const Ast,
     node: Node.Index,
     reader_names: []const []const u8,
-    buffer: *[ast.max_chain_bytes]u8,
+    buffer: *[ast.chain_len_max]u8,
 ) ?[]const u8 {
     const read = if (ast.is_call(tree.nodeTag(node))) ast.callee(tree, node) else node;
     const chain = ast.chain_text(tree, read, buffer) orelse return null;

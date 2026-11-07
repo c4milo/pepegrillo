@@ -47,13 +47,13 @@ pub const Findings = findings.Findings;
 pub const Severity = findings.Severity;
 
 /// Command-line arguments the linter reads before giving up.
-const max_arguments: usize = 1024;
+const arguments_max: usize = 1024;
 
 /// Bytes buffered for standard output before a flush.
-const output_buffer_bytes: usize = 16 * 1024;
+const output_buffer_len: usize = 16 * 1024;
 
 /// Bytes buffered for standard error before a flush.
-const error_buffer_bytes: usize = 4 * 1024;
+const error_buffer_len: usize = 4 * 1024;
 
 pub const exit_clean: u8 = 0;
 pub const exit_violations: u8 = 1;
@@ -66,7 +66,7 @@ pub fn lint_commits(
     results: *Findings,
     output: []const u8,
 ) !void {
-    for (try git_log.split_commits(arena, output, project.max_commits_per_run)) |commit| {
+    for (try git_log.split_commits(arena, output, project.commits_per_run_max)) |commit| {
         if (git_log.is_merge(commit.parents)) continue;
         const parsed = try parse(arena, project, commit.body);
         try rules.check_all(project, results, commit.sha, &parsed);
@@ -87,7 +87,7 @@ pub fn lint_message_text(
 }
 
 fn parse(arena: Allocator, comptime project: Config, text: []const u8) !message.Message {
-    return message.parse(arena, text, project.trailer_keys, project.max_message_lines);
+    return message.parse(arena, text, project.trailer_keys, project.message_lines_max);
 }
 
 /// The exit status a run with these findings ends with.
@@ -102,7 +102,7 @@ fn lint_message_file(
     results: *Findings,
     path: []const u8,
 ) !void {
-    const limit: Io.Limit = .limited(project.max_message_bytes);
+    const limit: Io.Limit = .limited(project.message_len_max);
     const text = try Io.Dir.cwd().readFileAllocOptions(io, path, arena, limit, .of(u8), null);
     try lint_message_text(arena, project, results, path, text);
 }
@@ -126,13 +126,13 @@ fn lint(
 }
 
 /// The command `--range` runs: `git log` over the revisions, its output capped at the project's
-/// `max_git_output_bytes`.
+/// `git_output_len_max`.
 pub fn range_command(
     arena: Allocator,
     comptime project: Config,
     revisions: []const []const u8,
 ) !std.process.RunOptions {
-    return git_log.git_log_options(arena, revisions, project.max_git_output_bytes);
+    return git_log.git_log_options(arena, revisions, project.git_output_len_max);
 }
 
 /// One run over the command-line arguments, without the program name: every finding written to
@@ -150,7 +150,7 @@ pub fn run(
         try errors.print("error: {s}\n{s}", .{ @errorName(err), arguments.usage });
         return exit_usage;
     };
-    var results: Findings = .{ .arena = arena, .max_findings = project.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = project.findings_max };
     lint(arena, io, project, &results, options, errors) catch |err| {
         try errors.print("error: {s}\n", .{@errorName(err)});
         return exit_usage;
@@ -163,10 +163,10 @@ pub fn main(init: std.process.Init, comptime project: Config) !void {
     comptime if (config.invalid_reason(&project)) |reason| @compileError(reason);
     const arena = init.arena.allocator();
     const all_arguments = try init.minimal.args.toSlice(arena);
-    if (all_arguments.len > max_arguments) return error.TooManyArguments;
+    if (all_arguments.len > arguments_max) return error.TooManyArguments;
     const given = if (all_arguments.len == 0) all_arguments else all_arguments[1..];
-    var output_buffer: [output_buffer_bytes]u8 = undefined;
-    var error_buffer: [error_buffer_bytes]u8 = undefined;
+    var output_buffer: [output_buffer_len]u8 = undefined;
+    var error_buffer: [error_buffer_len]u8 = undefined;
     // Streaming, not positional: a positional writer starts at offset 0 and overwrites earlier
     // output when standard output is redirected to a file.
     var out = Io.File.stdout().writerStreaming(init.io, &output_buffer);
@@ -213,7 +213,7 @@ test "lint_commits reports one line per finding, named by sha" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: Findings = .{ .arena = arena, .max_findings = test_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     try lint_commits(arena, test_config, &results, "aaa\x00ppp\x00Adds the page cache.\n\x00\n");
     try testing.expectEqual(1, results.count());
     try testing.expectEqualStrings("aaa", results.items.items[0].source);
@@ -225,7 +225,7 @@ test "lint_commits reports nothing for a conforming range" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: Findings = .{ .arena = arena, .max_findings = scoped_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = scoped_config.findings_max };
     try lint_commits(arena, scoped_config, &results, git_log.two_commit_log);
     try testing.expectEqual(0, results.count());
     try testing.expectEqual(exit_clean, exit_status(&results));
@@ -235,7 +235,7 @@ test "lint_commits skips a merge commit, whose message git wrote" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: Findings = .{ .arena = arena, .max_findings = test_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     const log = "aaa\x00bbb ccc\x00Merge branch 'topic' into main\n\x00\n";
     try lint_commits(arena, test_config, &results, log);
     try testing.expectEqual(0, results.count());
@@ -245,7 +245,7 @@ test "the same merge message on one parent is not skipped" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: Findings = .{ .arena = arena, .max_findings = test_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     const log = "aaa\x00bbb\x00Merge branch 'topic' into main\n\x00\n";
     try lint_commits(arena, test_config, &results, log);
     try testing.expectEqual(1, results.count());
@@ -256,7 +256,7 @@ test "a warning alone leaves the exit status clean" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: Findings = .{ .arena = arena, .max_findings = scoped_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = scoped_config.findings_max };
     const log = "aaa\x00ppp\x00feat(frobnicator): add the page cache\n\x00\n";
     try lint_commits(arena, scoped_config, &results, log);
     try testing.expectEqual(1, results.count());
@@ -269,7 +269,7 @@ test "lint_message_text drops the # lines git's editor template writes" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: Findings = .{ .arena = arena, .max_findings = test_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     const text = "feat(store): add the page cache\n# Please enter the commit message.\n";
     try lint_message_text(arena, test_config, &results, "COMMIT_EDITMSG", text);
     try testing.expectEqual(0, results.count());
@@ -279,7 +279,7 @@ test "lint_message_text names the path and keeps a # that does not open a line" 
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: Findings = .{ .arena = arena, .max_findings = test_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     const text = "feat(store): add the page cache\n #1 is the reason\n";
     try lint_message_text(arena, test_config, &results, "COMMIT_EDITMSG", text);
     try testing.expectEqual(1, results.count());
@@ -297,7 +297,7 @@ test "lint_commits and lint_message_text parse with the configured trailer keys"
         break :blk project;
     };
     const text = "feat: add x\n\none\n\ntwo\n\nthree\n\nChange-Id: I0123\n";
-    var results: Findings = .{ .arena = arena, .max_findings = test_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     try lint_message_text(arena, change_ids, &results, "COMMIT_EDITMSG", text);
     const log = try std.fmt.allocPrint(arena, "aaa\x00ppp\x00{s}\x00\n", .{text});
     try lint_commits(arena, change_ids, &results, log);
@@ -307,14 +307,14 @@ test "lint_commits and lint_message_text parse with the configured trailer keys"
     try testing.expectEqualStrings(rules.body_size_rule, results.items.items[0].rule);
 }
 
-test "max_message_lines and max_commits_per_run are the caps lint_commits reads" {
+test "message_lines_max and commits_per_run_max are the caps lint_commits reads" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var results: Findings = .{ .arena = arena, .max_findings = test_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     const few_lines = comptime blk: {
         var project = test_config;
-        project.max_message_lines = 1;
+        project.message_lines_max = 1;
         break :blk project;
     };
     const two_lines = "aaa\x00ppp\x00feat: add x\n\nwhy\n\x00\n";
@@ -322,7 +322,7 @@ test "max_message_lines and max_commits_per_run are the caps lint_commits reads"
     try testing.expectError(error.TooManyLines, too_long);
     const one_commit = comptime blk: {
         var project = test_config;
-        project.max_commits_per_run = 1;
+        project.commits_per_run_max = 1;
         break :blk project;
     };
     const log = git_log.two_commit_log;
@@ -330,7 +330,7 @@ test "max_message_lines and max_commits_per_run are the caps lint_commits reads"
     try testing.expectEqual(0, results.count());
 }
 
-test "max_message_bytes is the size a message file must stay under" {
+test "message_len_max is the size a message file must stay under" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -339,17 +339,17 @@ test "max_message_bytes is the size a message file must stay under" {
     const text = "feat(store): add the page cache\n";
     try directory.dir.writeFile(testing.io, .{ .sub_path = "message", .data = text });
     const path = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/message", .{directory.sub_path});
-    var results: Findings = .{ .arena = arena, .max_findings = test_config.max_findings };
+    var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     const small = comptime blk: {
         var project = test_config;
-        project.max_message_bytes = text.len;
+        project.message_len_max = text.len;
         break :blk project;
     };
     const refused = lint_message_file(arena, testing.io, small, &results, path);
     try testing.expectError(error.StreamTooLong, refused);
     const large = comptime blk: {
         var project = test_config;
-        project.max_message_bytes = text.len + 1;
+        project.message_len_max = text.len + 1;
         break :blk project;
     };
     try lint_message_file(arena, testing.io, large, &results, path);
@@ -361,7 +361,7 @@ test "range_command runs git log over the revisions with the project's output ca
     defer arena_state.deinit();
     const capped = comptime blk: {
         var project = test_config;
-        project.max_git_output_bytes = 4096;
+        project.git_output_len_max = 4096;
         break :blk project;
     };
     const revisions = [_][]const u8{"origin/main..HEAD"};
@@ -390,7 +390,7 @@ test "run writes every finding and returns the exit status, and caps the finding
     try testing.expectEqual(2, std.mem.count(u8, out.buffered(), description_lines));
     const one_finding = comptime blk: {
         var project = test_config;
-        project.max_findings = 1;
+        project.findings_max = 1;
         break :blk project;
     };
     var capped_out: Io.Writer = .fixed(&buffer);

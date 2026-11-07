@@ -60,7 +60,7 @@ const record_flag = "--record";
 const exit_success: u8 = 0;
 const exit_differs: u8 = 1;
 const exit_unusable: u8 = 2;
-const output_buffer_bytes: usize = 4096;
+const output_buffer_len: usize = 4096;
 
 /// Why a configuration cannot run, which the compile error names.
 pub fn check_config(comptime project: Config) ?[]const u8 {
@@ -79,8 +79,8 @@ pub fn main(init: std.process.Init, comptime project: Config) !void {
     const arena = init.arena.allocator();
     const all_arguments = try init.minimal.args.toSlice(arena);
     const given = if (all_arguments.len == 0) all_arguments else all_arguments[1..];
-    var output_buffer: [output_buffer_bytes]u8 = undefined;
-    var error_buffer: [output_buffer_bytes]u8 = undefined;
+    var output_buffer: [output_buffer_len]u8 = undefined;
+    var error_buffer: [output_buffer_len]u8 = undefined;
     var out = Io.File.stdout().writerStreaming(init.io, &output_buffer);
     var errors = Io.File.stderr().writerStreaming(init.io, &error_buffer);
     const status = try run(arena, init.io, project, given, &out.interface, &errors.interface);
@@ -169,7 +169,7 @@ test "check_config refuses an empty prefix, a pin outside it and a repeated pin"
 }
 
 fn expect_report(found: []const Pin, expected: []const u8) !void {
-    var buffer: [output_buffer_bytes]u8 = undefined;
+    var buffer: [output_buffer_len]u8 = undefined;
     var errors: Io.Writer = .fixed(&buffer);
     try testing.expectEqual(expected.len != 0, try report(test_project, found, &errors));
     try testing.expectEqualStrings(expected, errors.buffered());

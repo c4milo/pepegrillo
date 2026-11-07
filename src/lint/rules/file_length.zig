@@ -1,9 +1,9 @@
-//! file-length: a hand-written file stays at or under `max_lines` lines, so a reader can hold one
+//! file-length: a hand-written file stays at or under `lines_max` lines, so a reader can hold one
 //! file in one sitting.
 //!
 //! Over every file in `scope`, the rule counts lines the way an editor numbers them: one per
 //! newline, plus one for a last line with no newline. It reports a file over the limit once, at
-//! the first line past the limit, with `{lines} lines, over the {max_lines}-line limit` followed
+//! the first line past the limit, with `{lines} lines, over the {lines_max}-line limit` followed
 //! by `message_suffix`.
 
 const std = @import("std");
@@ -12,7 +12,7 @@ const Scope = @import("../scope.zig").Scope;
 const text = @import("../text.zig");
 
 /// The line limit a configuration gets when it names none.
-pub const default_max_lines: u32 = 500;
+pub const lines_max_default: u32 = 500;
 
 pub const Config = struct {
     /// The rule name findings are reported under and `--rule` selects.
@@ -20,7 +20,7 @@ pub const Config = struct {
     /// The files the rule reads.
     scope: Scope,
     /// The most lines a file may hold.
-    max_lines: u32 = default_max_lines,
+    lines_max: u32 = lines_max_default,
     /// Printed after the finding: `; split the file`.
     message_suffix: []const u8 = "",
 };
@@ -28,21 +28,21 @@ pub const Config = struct {
 /// The rule for one configuration: a type with the `name` and `check` the driver dispatches to.
 pub fn Rule(comptime config: Config) type {
     comptime std.debug.assert(config.name.len != 0);
-    comptime std.debug.assert(config.max_lines != 0);
+    comptime std.debug.assert(config.lines_max != 0);
     return struct {
         pub const name = config.name;
 
         pub fn check(context: *report.Context, file: report.File) !void {
             if (!config.scope.applies(file.path)) return;
             const lines = text.count_lines(file.source);
-            if (lines <= config.max_lines) return;
+            if (lines <= config.lines_max) return;
             try context.findings.add(
                 name,
                 file.path,
-                config.max_lines + 1,
+                config.lines_max + 1,
                 1,
                 "{d} lines, over the {d}-line limit{s}",
-                .{ lines, config.max_lines, config.message_suffix },
+                .{ lines, config.lines_max, config.message_suffix },
             );
         }
     };
@@ -56,7 +56,7 @@ const harness = @import("../harness.zig");
 /// One line of a fixture. A comment line, so that a fixture is also a file that parses.
 const fixture_line = "//\n";
 
-const limit = default_max_lines;
+const limit = lines_max_default;
 const at_limit: [:0]const u8 = fixture_line ** limit;
 const over_limit: [:0]const u8 = fixture_line ** (limit + 1);
 
@@ -109,7 +109,7 @@ test "file-length reads the name and the limit a configuration gives" {
     const short = Rule(.{
         .name = "short-files",
         .scope = .{ .extensions = &.{".zig"} },
-        .max_lines = 2,
+        .lines_max = 2,
     });
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();

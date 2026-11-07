@@ -22,7 +22,7 @@ const ast_scan = @import("ast_scan.zig");
 
 /// Deepest AST node a visitor recurses into. Recursion depth is bounded by the source's
 /// syntactic nesting, and this is the ceiling on that.
-pub const max_tree_depth: u32 = 512;
+pub const tree_depth_max: u32 = 512;
 
 /// Every scanned node passes through `for_each_child`, which hands each child node to
 /// `visitor.child`. The visitor decides whether to descend further.
@@ -348,7 +348,7 @@ pub fn is_while(tag: Node.Tag) bool {
 // The readers of `ast_read.zig`, re-exported so a rule reaches the whole surface through this
 // file: it is the entry point every rule imports.
 
-pub const max_chain_bytes = ast_read.max_chain_bytes;
+pub const chain_len_max = ast_read.chain_len_max;
 pub const Location = ast_read.Location;
 pub const token_location = ast_read.token_location;
 pub const node_location = ast_read.node_location;
@@ -367,7 +367,7 @@ pub const imported_path = ast_read.imported_path;
 
 // The subtree reads of `ast_scan.zig`, re-exported for the same reason.
 
-pub const max_deferred_identifiers = ast_scan.max_deferred_identifiers;
+pub const deferred_identifiers_max = ast_scan.deferred_identifiers_max;
 pub const Comparison = ast_scan.Comparison;
 pub const can_fail = ast_scan.can_fail;
 pub const mentions = ast_scan.mentions;

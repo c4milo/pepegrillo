@@ -52,14 +52,14 @@ const Visitor = struct {
     pub fn child(self: *Visitor, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
+        std.debug.assert(self.depth <= ast.tree_depth_max);
         self.visit(node) catch |failure| {
             self.failure = failure;
         };
     }
 
     fn visit(self: *Visitor, node: Node.Index) !void {
-        var buffer: [ast.max_chain_bytes]u8 = undefined;
+        var buffer: [ast.chain_len_max]u8 = undefined;
         if (ast.chain_text(self.tree, node, &buffer)) |chain| {
             // A chain has no children beside its own segments, so it is read whole and never
             // descended into.
@@ -94,7 +94,7 @@ const Visitor = struct {
 
     fn visit_call(self: *Visitor, node: Node.Index) !void {
         const callee = ast.callee(self.tree, node);
-        var buffer: [ast.max_chain_bytes]u8 = undefined;
+        var buffer: [ast.chain_len_max]u8 = undefined;
         const chain = ast.chain_text(self.tree, callee, &buffer) orelse return;
         try self.visit_method_call(callee, chain);
         // A chain check 1 forbids, as written or through an alias, is reported when the callee is
@@ -189,7 +189,7 @@ const Aliases = std.StringHashMapUnmanaged([]const u8);
 fn collect_aliases(arena: Allocator, tree: *const Ast) !Aliases {
     var written: Aliases = .empty;
     for (tree.rootDecls()) |declaration| {
-        var buffer: [ast.max_chain_bytes]u8 = undefined;
+        var buffer: [ast.chain_len_max]u8 = undefined;
         const alias = alias_declaration(tree, declaration, &buffer) orelse continue;
         try written.put(arena, alias.name, try arena.dupe(u8, alias.value));
     }
@@ -212,7 +212,7 @@ const Alias = struct {
 fn alias_declaration(
     tree: *const Ast,
     declaration: Node.Index,
-    buffer: *[ast.max_chain_bytes]u8,
+    buffer: *[ast.chain_len_max]u8,
 ) ?Alias {
     const variable = tree.fullVarDecl(declaration) orelse return null;
     if (tree.tokenTag(variable.ast.mut_token) != .keyword_const) return null;
@@ -263,8 +263,8 @@ const TypeSearch = struct {
     pub fn child(self: *TypeSearch, node: Node.Index) void {
         self.depth += 1;
         defer self.depth -= 1;
-        std.debug.assert(self.depth <= ast.max_tree_depth);
-        var buffer: [ast.max_chain_bytes]u8 = undefined;
+        std.debug.assert(self.depth <= ast.tree_depth_max);
+        var buffer: [ast.chain_len_max]u8 = undefined;
         if (ast.chain_text(self.tree, node, &buffer)) |chain| {
             if (ast.has_segment(chain, self.wanted)) self.found = true;
             return;

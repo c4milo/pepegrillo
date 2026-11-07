@@ -18,7 +18,7 @@
 //! `--list` prints a line for every declaration instead, highest score first, with `note` in
 //! place of `error` for a declaration at or under the threshold. Each file that could not be read
 //! or scored follows as `path: error: [not-scored] reason`, and one summary line ends the report.
-//! The threshold is `default_max_score`, 15, unless `--max` names another; a score equal to the
+//! The threshold is `score_max_default`, 15, unless `--max` names another; a score equal to the
 //! threshold passes.
 //!
 //! Exit status: 0 when nothing is over the threshold and every file was scored, 1 when something
@@ -81,8 +81,8 @@
 //! to do rather than what it says.
 //!
 //! Limits. A file is reported as not scored, never scored in part, when it does not parse, holds
-//! more than `max_functions_per_file` declarations, nests deeper than `max_tree_depth` AST nodes,
-//! or is larger than `max_source_bytes`.
+//! more than `functions_per_file_max` declarations, nests deeper than `tree_depth_max` AST nodes,
+//! or is larger than `source_len_max`.
 
 const std = @import("std");
 const Io = std.Io;
@@ -93,27 +93,27 @@ pub const report = @import("complexity_report.zig");
 pub const FunctionScore = scorer.FunctionScore;
 pub const ScoreError = scorer.ScoreError;
 pub const score_source = scorer.score_source;
-pub const max_functions_per_file = scorer.max_functions_per_file;
-pub const max_tree_depth = scorer.max_tree_depth;
+pub const functions_per_file_max = scorer.functions_per_file_max;
+pub const tree_depth_max = scorer.tree_depth_max;
 
 pub const Options = report.Options;
 pub const Report = report.Report;
 pub const parse_arguments = report.parse_arguments;
 pub const print_report = report.print_report;
-pub const default_max_score = report.default_max_score;
-pub const max_source_bytes = report.max_source_bytes;
+pub const score_max_default = report.score_max_default;
+pub const source_len_max = report.source_len_max;
 pub const exit_usage = report.exit_usage;
 
 /// Command-line arguments the tool reads before giving up.
-const max_arguments: usize = 1024;
+const arguments_max: usize = 1024;
 
 /// Bytes buffered for standard output before a flush.
-const output_buffer_bytes: usize = 16 * 1024;
+const output_buffer_len: usize = 16 * 1024;
 
 pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
     const all_arguments = try init.minimal.args.toSlice(arena);
-    if (all_arguments.len > max_arguments) return error.TooManyArguments;
+    if (all_arguments.len > arguments_max) return error.TooManyArguments;
     const arguments = if (all_arguments.len == 0) all_arguments else all_arguments[1..];
     const options = parse_arguments(arena, arguments) catch |failure| {
         std.debug.print("error: {s}\n", .{@errorName(failure)});
@@ -133,7 +133,7 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(exit_usage);
     };
 
-    var output_buffer: [output_buffer_bytes]u8 = undefined;
+    var output_buffer: [output_buffer_len]u8 = undefined;
     // Streaming, not positional: a positional writer starts at offset 0 and overwrites earlier
     // output when standard output is redirected to a file.
     var writer = Io.File.stdout().writerStreaming(init.io, &output_buffer);
