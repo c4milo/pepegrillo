@@ -29,12 +29,8 @@ const MarkdownProbe = struct {
 
 const Linter = driver.Linter(.{ ZigProbe, MarkdownProbe });
 
-fn new_run(arena: std.mem.Allocator) driver.Run {
+fn new_linter(arena: std.mem.Allocator) Linter {
     return .{ .context = .{ .arena = arena, .io = testing.io, .findings = .{ .arena = arena } } };
-}
-
-fn exit_status_of(run: *const driver.Run) u8 {
-    return driver.exit_status(run.context.findings.count(), run.file_errors);
 }
 
 test "parse_arguments reads --rule and paths, and defaults to every rule" {
@@ -71,10 +67,10 @@ test "rules are looked up by name in the order they were given" {
 }
 
 test "the exit status is 1 on a finding or a file error and 0 otherwise" {
-    try testing.expectEqual(driver.exit_clean, driver.exit_status(0, 0));
-    try testing.expectEqual(driver.exit_findings, driver.exit_status(1, 0));
-    try testing.expectEqual(driver.exit_findings, driver.exit_status(0, 1));
-    try testing.expectEqual(driver.exit_findings, driver.exit_status(3, 2));
+    try testing.expectEqual(driver.exit_clean, driver.exit_status_of(0, 0));
+    try testing.expectEqual(driver.exit_findings, driver.exit_status_of(1, 0));
+    try testing.expectEqual(driver.exit_findings, driver.exit_status_of(0, 1));
+    try testing.expectEqual(driver.exit_findings, driver.exit_status_of(3, 2));
 }
 
 /// Writes the fixture tree the walk test reads: two files to lint, one under a subdirectory, and
@@ -101,17 +97,16 @@ test "the walk visits every regular file, skips build output and .git, and joins
     defer tmp.cleanup();
     try write_walk_fixture(tmp.dir);
 
-    var run = new_run(arena_state.allocator());
-    // The reported path is the root label joined with the entry's path; the files are read
-    // through `tmp.dir`, so the label need not exist.
+    var linter = new_linter(arena_state.allocator());
+    // The reported path is the root joined with the entry's path.
     var root_buffer: [driver.path_len_max]u8 = undefined;
     const root = try std.fmt.bufPrint(&root_buffer, ".zig-cache/tmp/{s}", .{tmp.sub_path});
-    try Linter.walk_directory(&run, tmp.dir, root);
-    run.context.findings.sort();
+    try linter.lint_path(root);
+    linter.context.findings.sort();
 
-    try testing.expectEqual(2, run.files_seen);
-    try testing.expectEqual(0, run.file_errors);
-    const findings = run.context.findings.items.items;
+    try testing.expectEqual(2, linter.files_seen);
+    try testing.expectEqual(0, linter.file_errors);
+    const findings = linter.context.findings.items.items;
     try testing.expectEqual(2, findings.len);
     try testing.expectEqualStrings("markdown-probe", findings[0].rule);
     try testing.expect(std.mem.endsWith(u8, findings[0].path, "/docs/design.md"));
@@ -130,16 +125,16 @@ test "lint_path on a single file runs the rules, and a missing path is a file er
     const path = try std.fmt.bufPrint(&path_buffer, path_format, .{tmp.sub_path});
 
     const arena = arena_state.allocator();
-    var run = new_run(arena);
-    run.quiet = true;
+    var linter = new_linter(arena);
+    linter.quiet = true;
     const markdown_only = [_][]const u8{ "--rule", "markdown-probe", "x" };
-    run.enabled = (try Linter.parse_arguments(arena, &markdown_only)).enabled;
-    try Linter.lint_path(&run, path);
-    try testing.expectEqual(1, run.files_seen);
-    try testing.expectEqual(driver.exit_clean, exit_status_of(&run));
-    try Linter.lint_path(&run, ".zig-cache/tmp/no-such-directory/missing.zig");
-    try testing.expectEqual(1, run.file_errors);
-    try testing.expectEqual(driver.exit_findings, exit_status_of(&run));
+    linter.enabled = (try Linter.parse_arguments(arena, &markdown_only)).enabled;
+    try linter.lint_path(path);
+    try testing.expectEqual(1, linter.files_seen);
+    try testing.expectEqual(driver.exit_clean, linter.exit_status());
+    try linter.lint_path(".zig-cache/tmp/no-such-directory/missing.zig");
+    try testing.expectEqual(1, linter.file_errors);
+    try testing.expectEqual(driver.exit_findings, linter.exit_status());
 }
 
 test "a .zig file that does not parse is reported under the parse pseudo-rule" {
@@ -152,9 +147,9 @@ test "a .zig file that does not parse is reported under the parse pseudo-rule" {
     const path_format = ".zig-cache/tmp/{s}/broken.zig";
     const path = try std.fmt.bufPrint(&path_buffer, path_format, .{tmp.sub_path});
 
-    var run = new_run(arena_state.allocator());
-    try Linter.lint_path(&run, path);
-    const findings = run.context.findings.items.items;
+    var linter = new_linter(arena_state.allocator());
+    try linter.lint_path(path);
+    const findings = linter.context.findings.items.items;
     try testing.expectEqual(1, findings.len);
     try testing.expectEqualStrings(driver.parse_rule_name, findings[0].rule);
     try testing.expectEqual(1, findings[0].line);
@@ -169,14 +164,14 @@ test "--rule limits the dispatch to the named rules" {
     var tree = try Ast.parse(arena, source, .zig);
     defer tree.deinit(arena);
 
-    var run = new_run(arena);
+    var linter = new_linter(arena);
     const file: report.File = .{ .path = "src/store/page.zig", .source = source, .tree = &tree };
-    try Linter.dispatch(&run, file);
-    try testing.expectEqual(1, run.context.findings.count());
+    try linter.dispatch(file);
+    try testing.expectEqual(1, linter.context.findings.count());
     const markdown_only = [_][]const u8{ "--rule", "markdown-probe", "src" };
-    run.enabled = (try Linter.parse_arguments(arena, &markdown_only)).enabled;
-    try Linter.dispatch(&run, file);
-    try testing.expectEqual(1, run.context.findings.count());
+    linter.enabled = (try Linter.parse_arguments(arena, &markdown_only)).enabled;
+    try linter.dispatch(file);
+    try testing.expectEqual(1, linter.context.findings.count());
 }
 
 test "a file the walk cannot read prints as path: error: [unreadable] reason" {
@@ -199,17 +194,17 @@ test "an absolute or ./ PATH under the working directory reaches the rules relat
     const source = "const a = 1;\n";
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "src/store/page.zig", .data = source });
 
-    var run = new_run(arena);
-    run.working_directory = paths.canonical_working_directory(arena, testing.io);
-    try testing.expect(run.working_directory.len != 0);
+    var linter = new_linter(arena);
+    linter.working_directory = paths.canonical_working_directory(arena, testing.io);
+    try testing.expect(linter.working_directory.len != 0);
     const relative = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}", .{tmp.sub_path});
-    const absolute = try std.fmt.allocPrint(arena, "{s}/{s}", .{ run.working_directory, relative });
+    const absolute = try std.fmt.allocPrint(arena, "{s}/{s}", .{ linter.working_directory, relative });
     const dotted = try std.fmt.allocPrint(arena, "./{s}/src/store/page.zig", .{relative});
-    try Linter.lint_path(&run, absolute);
-    try Linter.lint_path(&run, dotted);
+    try linter.lint_path(absolute);
+    try linter.lint_path(dotted);
 
     const expected = try std.fmt.allocPrint(arena, "{s}/src/store/page.zig", .{relative});
-    const findings = run.context.findings.items.items;
+    const findings = linter.context.findings.items.items;
     try testing.expectEqual(2, findings.len);
     for (findings) |finding| try testing.expectEqualStrings(expected, finding.path);
 }

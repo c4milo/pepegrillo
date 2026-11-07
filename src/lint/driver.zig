@@ -74,30 +74,43 @@ pub const exit_usage: u8 = 2;
 
 const rule_flag = "--rule";
 
-pub const ArgumentError = error{
-    MissingValue,
-    UnknownRule,
-    UnknownFlag,
-    NoPaths,
-} || Allocator.Error;
-
-/// The most rules one driver dispatches to, which sizes the enabled-rule table.
+/// The most rules one driver dispatches to.
 pub const rules_max: usize = 32;
 
-/// Which rules run and which paths are walked, as read from the command line.
-pub const Options = struct {
-    enabled: [rules_max]bool = @splat(true),
-    paths: []const []const u8 = &.{},
-};
-
-/// The driver for one set of rules. `rules` is a tuple of rule types, in the order `--rule` names
-/// are looked up and the usage line lists them. Every function here forwards to a top-level one
-/// that takes `rules` as a comptime parameter, so each is scored on its own.
+/// The driver for one set of rules, and the state of one run: the walk, the per-file dispatch, and
+/// the counts the exit status is computed from. `rules` is a tuple of rule types, in the order
+/// `--rule` names are looked up and the usage line lists them. Every function here forwards to a
+/// top-level one that takes `rules` as a comptime parameter, so each is scored on its own.
 pub fn Linter(comptime rules: anytype) type {
     comptime assert_rule_set(rules);
 
     return struct {
+        const Self = @This();
+
         pub const count = rules.len;
+
+        pub const ArgumentError = error{
+            MissingValue,
+            UnknownRule,
+            UnknownFlag,
+            NoPaths,
+        } || Allocator.Error;
+
+        /// Which rules run and which paths are walked, as read from the command line.
+        pub const Options = struct {
+            enabled: [rules.len]bool = @splat(true),
+            paths: []const []const u8 = &.{},
+        };
+
+        context: report.Context,
+        enabled: [rules.len]bool = @splat(true),
+        files_seen: usize = 0,
+        file_errors: usize = 0,
+        /// Set by the tests so a passing run writes nothing. `main` leaves it false.
+        quiet: bool = false,
+        /// The canonical working directory every PATH is made relative to. Empty leaves an
+        /// absolute PATH absolute.
+        working_directory: []const u8 = "",
 
         pub fn main(init: std.process.Init) !void {
             return run_main(rules, init);
@@ -114,16 +127,19 @@ pub fn Linter(comptime rules: anytype) type {
             return rule_index_in(rules, rule_name);
         }
 
-        pub fn lint_path(run: *Run, path: []const u8) !void {
-            return run.lint_path(rules, path);
+        /// Lints one PATH: a file, or a directory walked with the skipped directories left out.
+        pub fn lint_path(linter: *Self, path: []const u8) !void {
+            return lint_path_in(rules, linter, path);
         }
 
-        pub fn walk_directory(run: *Run, dir: Io.Dir, root: []const u8) !void {
-            return run.walk_directory(rules, dir, root);
+        /// Runs every enabled rule over one file.
+        pub fn dispatch(linter: *Self, file: report.File) !void {
+            return dispatch_in(rules, linter, file);
         }
 
-        pub fn dispatch(run: *Run, file: report.File) !void {
-            return run.dispatch(rules, file);
+        /// 0 when nothing was found and every file was read, else 1.
+        pub fn exit_status(linter: *const Self) u8 {
+            return exit_status_of(linter.context.findings.count(), linter.file_errors);
         }
     };
 }
@@ -133,9 +149,9 @@ fn parse_arguments_for(
     comptime rules: anytype,
     arena: Allocator,
     arguments: []const []const u8,
-) ArgumentError!Options {
-    var options: Options = .{};
-    var selected: [rules_max]bool = @splat(false);
+) Linter(rules).ArgumentError!Linter(rules).Options {
+    var options: Linter(rules).Options = .{};
+    var selected: [rules.len]bool = @splat(false);
     var any_selected = false;
     var path_list: std.ArrayList([]const u8) = .empty;
     try path_list.ensureTotalCapacity(arena, arguments.len);
@@ -167,118 +183,105 @@ fn rule_index_in(comptime rules: anytype, rule_name: []const u8) ?usize {
     return null;
 }
 
-/// One run: the walk, the per-file dispatch, and the counts the exit status is computed from.
-pub const Run = struct {
-    context: report.Context,
-    enabled: [rules_max]bool = @splat(true),
-    files_seen: usize = 0,
-    file_errors: usize = 0,
-    /// Set by the tests so a passing run writes nothing. `main` leaves it false.
-    quiet: bool = false,
-    /// The canonical working directory every PATH is made relative to. Empty leaves an absolute
-    /// PATH absolute.
-    working_directory: []const u8 = "",
+fn lint_path_in(comptime rules: anytype, linter: *Linter(rules), argument: []const u8) !void {
+    const io = linter.context.io;
+    const arena = linter.context.arena;
+    const path = paths.resolve_argument(arena, io, linter.working_directory, argument);
+    const stat = Io.Dir.cwd().statFile(io, path, .{}) catch |failure| {
+        return file_error(rules, linter, path, @errorName(failure));
+    };
+    if (stat.kind != .directory) return lint_file(rules, linter, path);
+    var dir = Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch |failure| {
+        return file_error(rules, linter, path, @errorName(failure));
+    };
+    defer dir.close(io);
+    try walk_directory(rules, linter, dir, path);
+}
 
-    pub fn lint_path(self: *Run, comptime rules: anytype, argument: []const u8) !void {
-        const io = self.context.io;
-        const arena = self.context.arena;
-        const path = paths.resolve_argument(arena, io, self.working_directory, argument);
-        const stat = Io.Dir.cwd().statFile(io, path, .{}) catch |failure| {
-            return self.file_error(path, @errorName(failure));
-        };
-        if (stat.kind != .directory) return self.lint_file(rules, path);
-        var dir = Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch |failure| {
-            return self.file_error(path, @errorName(failure));
-        };
-        defer dir.close(io);
-        try self.walk_directory(rules, dir, path);
-    }
-
-    /// Visits every regular file under `dir`, reported under `root/...`, entering every directory
-    /// but the skipped ones.
-    pub fn walk_directory(
-        self: *Run,
-        comptime rules: anytype,
-        dir: Io.Dir,
-        root: []const u8,
-    ) !void {
-        var walker = try dir.walkSelectively(self.context.arena);
-        defer walker.deinit();
-        var path_buffer: [path_len_max]u8 = undefined;
-        while (try walker.next(self.context.io)) |entry| {
-            switch (entry.kind) {
-                .directory => if (!is_skipped_directory(entry.basename)) {
-                    try walker.enter(self.context.io, entry);
-                },
-                .file => {
-                    const joined = paths.join(&path_buffer, root, entry.path) catch {
-                        return self.file_error(entry.path, "PathTooLong");
-                    };
-                    try self.lint_file(rules, joined);
-                },
-                else => {},
-            }
+/// Visits every regular file under `dir`, reported under `root/...`, entering every directory but
+/// the skipped ones.
+fn walk_directory(
+    comptime rules: anytype,
+    linter: *Linter(rules),
+    dir: Io.Dir,
+    root: []const u8,
+) !void {
+    var walker = try dir.walkSelectively(linter.context.arena);
+    defer walker.deinit();
+    var path_buffer: [path_len_max]u8 = undefined;
+    while (try walker.next(linter.context.io)) |entry| {
+        switch (entry.kind) {
+            .directory => if (!is_skipped_directory(entry.basename)) {
+                try walker.enter(linter.context.io, entry);
+            },
+            .file => {
+                const joined = paths.join(&path_buffer, root, entry.path) catch {
+                    return file_error(rules, linter, entry.path, "PathTooLong");
+                };
+                try lint_file(rules, linter, joined);
+            },
+            else => {},
         }
     }
+}
 
-    fn lint_file(self: *Run, comptime rules: anytype, path: []const u8) !void {
-        self.files_seen += 1;
-        if (self.files_seen > files_per_run_max) return error.TooManyFiles;
-        const arena = self.context.arena;
-        const source = self.context.read_file(path) orelse {
-            return self.file_error(path, "Unreadable");
-        };
-        defer arena.free(source);
-        var tree: Ast = undefined;
-        var tree_pointer: ?*const Ast = null;
-        if (paths.has_extension(path, paths.zig_extension)) {
-            tree = try Ast.parse(arena, source, .zig);
-            if (tree.errors.len == 0) {
-                tree_pointer = &tree;
-            } else {
-                try self.report_parse_error(path, &tree);
-            }
-        }
-        defer if (tree_pointer != null) tree.deinit(arena);
-        try self.dispatch(rules, .{ .path = path, .source = source, .tree = tree_pointer });
-    }
-
-    pub fn dispatch(self: *Run, comptime rules: anytype, file: report.File) !void {
-        inline for (rules, 0..) |rule, index| {
-            if (self.enabled[index]) try rule.check(&self.context, file);
+fn lint_file(comptime rules: anytype, linter: *Linter(rules), path: []const u8) !void {
+    linter.files_seen += 1;
+    if (linter.files_seen > files_per_run_max) return error.TooManyFiles;
+    const arena = linter.context.arena;
+    const source = linter.context.read_file(path) orelse {
+        return file_error(rules, linter, path, "Unreadable");
+    };
+    defer arena.free(source);
+    var tree: Ast = undefined;
+    var tree_pointer: ?*const Ast = null;
+    if (paths.has_extension(path, paths.zig_extension)) {
+        tree = try Ast.parse(arena, source, .zig);
+        if (tree.errors.len == 0) {
+            tree_pointer = &tree;
+        } else {
+            try report_parse_error(&linter.context, path, &tree);
         }
     }
+    defer if (tree_pointer != null) tree.deinit(arena);
+    try dispatch_in(rules, linter, .{ .path = path, .source = source, .tree = tree_pointer });
+}
 
-    /// The first parse error, at its token, as the `parse` pseudo-rule.
-    fn report_parse_error(self: *Run, path: []const u8, tree: *const Ast) !void {
-        const first = tree.errors[0];
-        var message_buffer: [parse_error_len_max]u8 = undefined;
-        var writer: Io.Writer = .fixed(&message_buffer);
-        tree.renderError(first, &writer) catch {};
-        const location = tree.tokenLocation(0, first.token);
-        try self.context.findings.add(
-            parse_rule_name,
-            path,
-            location.line + 1,
-            location.column + 1,
-            "{s}",
-            .{writer.buffered()},
-        );
+fn dispatch_in(comptime rules: anytype, linter: *Linter(rules), file: report.File) !void {
+    inline for (rules, 0..) |rule, index| {
+        if (linter.enabled[index]) try rule.check(&linter.context, file);
     }
+}
 
-    /// Counts a file the rules could not read, and prints it unless the caller asked for silence.
-    /// A test drives `lint_path` over a deliberately missing path and passes; printing there would
-    /// put the run under `zig build`'s "failed command" heading on a green run, which is how a
-    /// real failure gets lost in the noise.
-    fn file_error(self: *Run, path: []const u8, reason: []const u8) void {
-        self.file_errors += 1;
-        if (self.quiet) return;
-        var line_buffer: [file_error_line_len_max]u8 = undefined;
-        var line: Io.Writer = .fixed(&line_buffer);
-        write_file_error(&line, path, reason) catch {};
-        std.debug.print("{s}", .{line.buffered()});
-    }
-};
+/// The first parse error, at its token, as the `parse` pseudo-rule.
+fn report_parse_error(context: *report.Context, path: []const u8, tree: *const Ast) !void {
+    const first = tree.errors[0];
+    var message_buffer: [parse_error_len_max]u8 = undefined;
+    var writer: Io.Writer = .fixed(&message_buffer);
+    tree.renderError(first, &writer) catch {};
+    const location = tree.tokenLocation(0, first.token);
+    try context.findings.add(
+        parse_rule_name,
+        path,
+        location.line + 1,
+        location.column + 1,
+        "{s}",
+        .{writer.buffered()},
+    );
+}
+
+/// Counts a file the rules could not read, and prints it unless the caller asked for silence. A
+/// test drives `lint_path` over a deliberately missing path and passes; printing there would put
+/// the run under `zig build`'s "failed command" heading on a green run, which is how a real
+/// failure gets lost in the noise.
+fn file_error(comptime rules: anytype, linter: *Linter(rules), path: []const u8, reason: []const u8) void {
+    linter.file_errors += 1;
+    if (linter.quiet) return;
+    var line_buffer: [file_error_line_len_max]u8 = undefined;
+    var line: Io.Writer = .fixed(&line_buffer);
+    write_file_error(&line, path, reason) catch {};
+    std.debug.print("{s}", .{line.buffered()});
+}
 
 /// Writes the line for a file the walk cannot read: `path: error: [unreadable] reason`.
 pub fn write_file_error(out: *Io.Writer, path: []const u8, reason: []const u8) !void {
@@ -303,21 +306,21 @@ fn run_main(comptime rules: anytype, init: std.process.Init) !void {
         std.process.exit(exit_usage);
     };
 
-    var run: Run = .{
+    var linter: Linter(rules) = .{
         .context = .{ .arena = arena, .io = init.io, .findings = .{ .arena = arena } },
         .enabled = options.enabled,
         .working_directory = paths.canonical_working_directory(arena, init.io),
     };
-    for (options.paths) |path| try run.lint_path(rules, path);
-    run.context.findings.sort();
+    for (options.paths) |path| try linter.lint_path(path);
+    linter.context.findings.sort();
 
     var output_buffer: [output_buffer_len]u8 = undefined;
     // Streaming, not positional: a positional writer starts at offset 0 and overwrites earlier
     // output when standard output is redirected to a file.
     var writer = Io.File.stdout().writerStreaming(init.io, &output_buffer);
-    try run.context.findings.write(&writer.interface);
+    try linter.context.findings.write(&writer.interface);
     try writer.interface.flush();
-    std.process.exit(exit_status(run.context.findings.count(), run.file_errors));
+    std.process.exit(linter.exit_status());
 }
 
 /// Refuses, at compile time, a rule set the driver cannot run: more rules than `rules_max`, a name
@@ -352,7 +355,7 @@ fn is_skipped_directory(basename: []const u8) bool {
 }
 
 /// 0 when nothing was found and every file was read, else 1.
-pub fn exit_status(finding_count: usize, file_errors: usize) u8 {
+pub fn exit_status_of(finding_count: usize, file_errors: usize) u8 {
     return if (finding_count != 0 or file_errors != 0) exit_findings else exit_clean;
 }
 
