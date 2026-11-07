@@ -4,9 +4,10 @@ The owner ruled on 2026-11-07 that pepegrillo's API follows TigerStyle first, th
 standard library (`docs/api.md`). Seven findings of the API audit changed names and signatures
 in one set of breaking commits. This page lists each change, so that a project moves in one pass.
 
-No verdict changes. Each tool prints the same lines and exits with the same status. A
+No lint verdict changes. Each tool prints the same lines and exits with the same status. A
 configuration or a call that names an old name does not compile, and the compile error names the
-old name.
+old name. One configuration that compiled before does not compile now: a `lean` configuration with
+an empty `directory` or an empty `lake_arguments` (section 6).
 
 Do these steps in order:
 
@@ -28,6 +29,9 @@ Each root exports names, and not files. `lint` keeps five file namespaces: `lint
 | `lint.driver.Options` | `lint.Linter(rules).Options` |
 | `lint.driver.ArgumentError` | `lint.Linter(rules).ArgumentError` |
 | `lint.driver.exit_status(count, errors)` | `linter.exit_status()` |
+| `lint.driver.exit_clean`, `exit_findings`, `exit_usage` | removed: `Linter(rules).main` exits with them |
+| `lint.driver.parse_rule_name`, `unreadable_rule_name` | removed |
+| `lint.driver.write_file_error` | removed |
 | `lint.scope.Scope` | `lint.Scope` |
 | `lint.ast_scan.<name>` | `lint.ast.<name>` |
 | `lint.text.Line` | `lint.Line` |
@@ -45,6 +49,17 @@ Each root exports names, and not files. `lint` keeps five file namespaces: `lint
 | `commit.config.invalid_reason(&config)` | `commit.check_config(config)` |
 | `commit.config.default_commit_types` | `commit.commit_types_default` |
 | `commit.config.default_trailer_keys` | `commit.trailer_keys_default` |
+| `commit.config.default_max_subject_columns` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_body_columns` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_body_paragraphs` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_body_words` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_trailing_blank_lines` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_findings` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_message_lines` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_commits_per_run` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_message_bytes` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_max_git_output_bytes` | removed: read the default of the field in `commit.Config` |
+| `commit.config.default_unknown_scope_reason` | removed: read the default of the field in `commit.Config` |
 | `commit.findings.Finding` | `commit.Finding` |
 | `commit.findings.Findings` | `commit.Findings` |
 | `commit.arguments`, `commit.git_log`, `commit.message`, `commit.rules`, `commit.subject` | removed |
