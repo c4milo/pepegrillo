@@ -126,6 +126,9 @@ test "kept-options-pointer passes a copy, a field value, a local, a private init
         \\        var local: *const Options = undefined;
         \\        local = options;
         \\        self.other = &self.other.*;
+        \\        var copy: Ring = undefined;
+        \\        const target = &copy;
+        \\        target.* = .{ .other = options };
         \\    }
         \\};
     , &.{});
@@ -175,4 +178,62 @@ test "kept-options-pointer reads the names, the scope and the rule name its conf
     const findings = try harness.run(arena_state.allocator(), rule, "src/page.zig", source);
     try harness.expect_messages(findings, &.{message("start", "options", "other")});
     try testing.expectEqualStrings("kept-pointer", findings[0].rule);
+}
+
+test "kept-options-pointer reads every out parameter and a value in parentheses" {
+    try expect_findings(everywhere, "src/store/page.zig",
+        \\const Options = struct { size: u32, limits: struct { count_max: u32 } };
+        \\pub const Page = struct {
+        \\    options: *const Options,
+        \\    count_max: *const u32,
+        \\    pub fn init(scratch: *[4]u8, self: *Page, options: *const Options) void {
+        \\        scratch.* = @splat(0);
+        \\        self.options = (options);
+        \\        self.* = .{ .options = ((options)), .count_max = &(options.limits.count_max) };
+        \\    }
+        \\};
+        \\pub const Slot = struct {
+        \\    options: *const Options,
+        \\    pub fn init(options: *const Options) Slot {
+        \\        return (.{ .options = options });
+        \\    }
+        \\};
+    , &.{
+        message("init", "options", "options"),
+        message("init", "options", "options"),
+        message("init", "options", "count_max"),
+        message("init", "options", "options"),
+    });
+}
+
+test "kept-options-pointer passes a comptime pointer, a function pointer and a kept type" {
+    const configured: Config = .{
+        .scope = .{ .extensions = &.{".zig"} },
+        .kept_types = &.{"VTable"},
+    };
+    const source =
+        \\const std = @import("std");
+        \\const Options = struct { size: u32 };
+        \\pub const VTable = struct { size: *const fn () u32 };
+        \\pub const Provider = struct {
+        \\    vtable: *const VTable,
+        \\    other: *const std.mem.Allocator.VTable,
+        \\    callback: *const fn () void,
+        \\    options: *const Options,
+        \\    pub fn init(
+        \\        self: *Provider,
+        \\        vtable: *const VTable,
+        \\        other: *const std.mem.Allocator.VTable,
+        \\        callback: *const fn () void,
+        \\        comptime options: *const Options,
+        \\    ) void {
+        \\        self.* = .{ .vtable = vtable, .other = other, .callback = callback, .options = options };
+        \\    }
+        \\};
+    ;
+    try expect_findings(configured, "src/store/provider.zig", source, &.{});
+    try expect_findings(everywhere, "src/store/provider.zig", source, &.{
+        message("init", "vtable", "vtable"),
+        message("init", "other", "other"),
+    });
 }
