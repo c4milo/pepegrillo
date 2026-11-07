@@ -34,7 +34,7 @@ pub const Config = struct {
 /// The rule name every line carries.
 const rule = "lean";
 /// The file elan reads for the Lean release a project pins.
-pub const toolchain_file = "lean-toolchain";
+const toolchain_file = "lean-toolchain";
 const lake_program = "lake";
 /// Where elan installs lake, under `$HOME`.
 const elan_lake = ".elan/bin/lake";
@@ -76,7 +76,7 @@ pub fn run(arena: Allocator, io: Io, environ: *const std.process.Environ.Map, co
 }
 
 /// Where lake may be, in the order tried: on PATH, then where elan installs it.
-pub fn lake_candidates(arena: Allocator, environ: *const std.process.Environ.Map) ![]const []const u8 {
+fn lake_candidates(arena: Allocator, environ: *const std.process.Environ.Map) ![]const []const u8 {
     var candidates: std.ArrayList([]const u8) = .empty;
     try candidates.append(arena, lake_program);
     if (environ.get(home_variable)) |home| try candidates.append(arena, try std.fs.path.join(arena, &.{ home, elan_lake }));
@@ -84,7 +84,7 @@ pub fn lake_candidates(arena: Allocator, environ: *const std.process.Environ.Map
 }
 
 /// The exit status a lake run maps to: success, or a failed build.
-pub fn status_of(term: std.process.Child.Term) u8 {
+fn status_of(term: std.process.Child.Term) u8 {
     return switch (term) {
         .exited => |code| if (code == 0) exit_success else exit_failed,
         else => exit_failed,
@@ -125,4 +125,8 @@ test "run refuses a directory that pins no Lean release" {
     const status = try run(arena_state.allocator(), testing.io, &environ, .{ .directory = ".zig-cache/tmp/no-lean-here" }, &errors);
     try testing.expectEqual(2, status);
     try testing.expect(std.mem.indexOf(u8, errors.buffered(), "lean-toolchain: error: [lean] missing") != null);
+}
+
+test "the root exports these names alone" {
+    try @import("../public_names.zig").expect(@This(), &.{ "Config", "main", "run" });
 }

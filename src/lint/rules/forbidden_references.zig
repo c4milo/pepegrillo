@@ -89,9 +89,6 @@ pub const ParameterCheck = struct {
     description: []const u8,
 };
 
-/// Which parameter types the walk reads; see the file header.
-pub const ParameterTypes = ast.ParameterTypes;
-
 pub const Config = struct {
     /// The rule name findings are reported under and `--rule` selects.
     name: []const u8,
@@ -105,7 +102,7 @@ pub const Config = struct {
     callee_names: []const []const u8 = &.{},
     method_calls: MethodCalls = .{},
     parameter_check: ?ParameterCheck = null,
-    parameter_types: ParameterTypes = .every_prototype,
+    parameter_types: ast.ParameterTypes = .every_prototype,
     /// When set, checks 1 and 2 also read a chain through the file-level aliases the header
     /// describes.
     resolve_file_aliases: bool = false,

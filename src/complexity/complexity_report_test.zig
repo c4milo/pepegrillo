@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const testing = std.testing;
 const report = @import("complexity_report.zig");
+const paths = @import("../lint/paths.zig");
 const Report = report.Report;
 const Options = report.Options;
 const parse_arguments = report.parse_arguments;
@@ -266,7 +267,7 @@ test "an absolute PATH under the working directory is scored under its relative 
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "page.zig", .data = "fn f() void {}\n" });
 
     var run: Report = .{ .arena = arena, .io = testing.io };
-    run.working_directory = report.paths.canonical_working_directory(arena, testing.io);
+    run.working_directory = paths.canonical_working_directory(arena, testing.io);
     const relative = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     const absolute = try std.fmt.allocPrint(arena, "{s}/{s}", .{ run.working_directory, relative });
     try run.lint_path(absolute);

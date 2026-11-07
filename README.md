@@ -7,9 +7,9 @@ own rules. It has seven tools:
   rules a project configures: `forbidden_references`, `file_length`, `magic_numbers`,
   `denied_words`, `unbounded_loop`, `relative_import`, `defer_order`, `unreleased_acquire`,
   `markdown`, `static_alignment`, `global_state`, `undefined_fill`, `type_function_suffix` and
-  `kept_options_pointer`. `lint.names` checks at compile time that the
-  names a configuration holds still name something, so a rule cannot go quiet when what it guards
-  is renamed.
+  `kept_options_pointer`. `lint.assert_all_resolve` and `lint.assert_all_match` check at compile
+  time that the names a configuration holds still name something, so a rule cannot go quiet when
+  what it guards is renamed.
 - **complexity**: a cognitive-complexity scorer for every function and `test` block.
 - **commit**: a Conventional Commits linter for commit messages, and a `pre-push` hook that runs it.
 - **tla**: runs the TLC model checker over every TLA+ model under `spec/tla/`, and checks each

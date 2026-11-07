@@ -83,6 +83,9 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 
 - `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`, `tla`,
   `lean`, `instructions`, `checkfree`, and `report_line`, the finding line every tool prints.
+- Each root exports names, never a file, except the namespaces `lint.report`, `lint.paths`,
+  `lint.ast`, `lint.harness` and each `lint.rules.<rule>`. A test in each root lists its names
+  through `src/public_names.zig`, so a name added or removed by accident fails it.
 - `src/lint/` is the engine: `driver.zig`, `report.zig`, `scope.zig`, `paths.zig`, `text.zig`,
   `ast.zig`, `ast_read.zig`, `ast_scan.zig`, `names.zig`, `harness.zig`. `src/lint/rules/` holds
   the generic rules.

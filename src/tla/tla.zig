@@ -29,9 +29,13 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const report_line = @import("../report_line.zig");
 
-pub const header = @import("tla_header.zig");
-pub const models = @import("tla_models.zig");
-pub const tlc = @import("tla_tlc.zig");
+const header = @import("tla_header.zig");
+const models = @import("tla_models.zig");
+const tlc = @import("tla_tlc.zig");
+
+/// Where TLC keeps the states of one run. Public for a project's tool that runs TLC some other
+/// way, as `verified_jar` is.
+pub const states_path = tlc.states_path;
 
 pub const Config = struct {
     /// Where the models live, from the working directory.
@@ -197,7 +201,7 @@ fn plan_failure(failure: anyerror) []const u8 {
     };
 }
 
-pub fn matches(verdict: tlc.Verdict, expect: header.Expectation) bool {
+fn matches(verdict: tlc.Verdict, expect: header.Expectation) bool {
     return switch (verdict) {
         .holds => expect == .holds,
         .violated => expect == .violated,
@@ -258,4 +262,16 @@ test "state_label keeps each configuration's states apart" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     try testing.expectEqualStrings("spec_tla_store_mutants_skip.cfg", try state_label(arena_state.allocator(), "spec/tla/store/mutants/skip.cfg"));
+}
+
+test "the root exports these names alone" {
+    try @import("../public_names.zig").expect(@This(), &.{
+        "states_path", "Config", "main", "Context", "run", "verified_jar",
+    });
+}
+
+test {
+    _ = header;
+    _ = models;
+    _ = tlc;
 }

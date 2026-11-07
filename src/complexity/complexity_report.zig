@@ -4,7 +4,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-pub const paths = @import("../lint/paths.zig");
+const paths = @import("../lint/paths.zig");
 const report_line = @import("../report_line.zig");
 const scorer = @import("complexity_scorer.zig");
 const FunctionScore = scorer.FunctionScore;

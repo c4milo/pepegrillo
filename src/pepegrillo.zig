@@ -14,14 +14,18 @@ pub const instructions = @import("instructions/instructions.zig");
 pub const checkfree = @import("checkfree/checkfree.zig");
 pub const report_line = @import("report_line.zig");
 
+test "the root exports these names alone" {
+    try @import("public_names.zig").expect(@This(), &.{
+        "lint", "complexity", "commit", "tla", "lean", "instructions", "checkfree", "report_line",
+    });
+}
+
 test {
+    _ = @import("public_names.zig");
     _ = lint;
     _ = complexity;
     _ = commit;
     _ = tla;
-    _ = tla.header;
-    _ = tla.models;
-    _ = tla.tlc;
     _ = lean;
     _ = instructions;
     _ = checkfree;

@@ -36,9 +36,9 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const report_line = @import("../report_line.zig");
 
-pub const baseline = @import("instructions_baseline.zig");
-pub const cachegrind = @import("instructions_cachegrind.zig");
-pub const measure = @import("instructions_measure.zig");
+const baseline = @import("instructions_baseline.zig");
+const cachegrind = @import("instructions_cachegrind.zig");
+const measure = @import("instructions_measure.zig");
 
 pub const Case = struct {
     /// The case's name in the baseline and in every line the engine prints: letters, digits, `_`
@@ -351,6 +351,12 @@ fn rewritten(context: Context, comptime project: Config, counter: anytype, invoc
         return null;
     }
     return .{ .name = case.name, .rounds = measurement.rounds, .instructions = measurement.instructions };
+}
+
+test "the root exports these names alone" {
+    try @import("../public_names.zig").expect(@This(), &.{
+        "Case", "Config", "check_config", "main", "Context", "Invocation", "start", "parse_arguments", "run",
+    });
 }
 
 test {

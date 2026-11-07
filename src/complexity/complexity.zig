@@ -87,22 +87,25 @@
 const std = @import("std");
 const Io = std.Io;
 
-pub const scorer = @import("complexity_scorer.zig");
-pub const report = @import("complexity_report.zig");
+const files = struct {
+    const scorer = @import("complexity_scorer.zig");
+    const report = @import("complexity_report.zig");
+};
+const paths = @import("../lint/paths.zig");
 
-pub const FunctionScore = scorer.FunctionScore;
-pub const ScoreError = scorer.ScoreError;
-pub const score_source = scorer.score_source;
-pub const functions_per_file_max = scorer.functions_per_file_max;
-pub const tree_depth_max = scorer.tree_depth_max;
+pub const FunctionScore = files.scorer.FunctionScore;
+pub const ScoreError = files.scorer.ScoreError;
+pub const score_source = files.scorer.score_source;
+pub const functions_per_file_max = files.scorer.functions_per_file_max;
+pub const tree_depth_max = files.scorer.tree_depth_max;
 
-pub const Options = report.Options;
-pub const Report = report.Report;
-pub const parse_arguments = report.parse_arguments;
-pub const print_report = report.print_report;
-pub const score_max_default = report.score_max_default;
-pub const source_len_max = report.source_len_max;
-pub const exit_usage = report.exit_usage;
+pub const Options = files.report.Options;
+pub const Report = files.report.Report;
+pub const parse_arguments = files.report.parse_arguments;
+pub const print_report = files.report.print_report;
+pub const score_max_default = files.report.score_max_default;
+pub const source_len_max = files.report.source_len_max;
+pub const exit_usage = files.report.exit_usage;
 
 /// Command-line arguments the tool reads before giving up.
 const arguments_max: usize = 1024;
@@ -117,7 +120,7 @@ pub fn main(init: std.process.Init) !void {
     const arguments = if (all_arguments.len == 0) all_arguments else all_arguments[1..];
     const options = parse_arguments(arena, arguments) catch |failure| {
         std.debug.print("error: {s}\n", .{@errorName(failure)});
-        report.print_usage();
+        files.report.print_usage();
         std.process.exit(exit_usage);
     };
 
@@ -126,7 +129,7 @@ pub fn main(init: std.process.Init) !void {
     var run: Report = .{
         .arena = arena,
         .io = init.io,
-        .working_directory = report.paths.canonical_working_directory(arena, init.io),
+        .working_directory = paths.canonical_working_directory(arena, init.io),
     };
     for (options.paths) |path| run.lint_path(path) catch |failure| {
         std.debug.print("error: cannot read '{s}': {s}\n", .{ path, @errorName(failure) });
@@ -141,7 +144,16 @@ pub fn main(init: std.process.Init) !void {
     std.process.exit(status);
 }
 
+test "the root exports these names alone" {
+    try @import("../public_names.zig").expect(@This(), &.{
+        "FunctionScore",  "ScoreError",        "score_source",   "functions_per_file_max",
+        "tree_depth_max", "Options",           "Report",         "parse_arguments",
+        "print_report",   "score_max_default", "source_len_max", "exit_usage",
+        "main",
+    });
+}
+
 test {
-    _ = scorer;
-    _ = report;
+    _ = files.scorer;
+    _ = files.report;
 }

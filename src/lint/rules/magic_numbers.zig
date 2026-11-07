@@ -27,8 +27,6 @@ const Scope = @import("../scope.zig").Scope;
 /// limits.
 pub const literal_max_default: u64 = 1;
 
-pub const ParameterTypes = ast.ParameterTypes;
-
 pub const Config = struct {
     /// The rule name findings are reported under and `--rule` selects.
     name: []const u8 = "magic-numbers",
@@ -40,7 +38,7 @@ pub const Config = struct {
     skip_test_blocks: bool = true,
     /// Whether the inside of a `comptime` block is left unread.
     skip_comptime_blocks: bool = true,
-    parameter_types: ParameterTypes = .every_prototype,
+    parameter_types: ast.ParameterTypes = .every_prototype,
 };
 
 /// The rule for one configuration: a type with the `name` and `check` the driver dispatches to.

@@ -5,6 +5,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const instructions = @import("instructions.zig");
+const baseline = @import("instructions_baseline.zig");
+const cachegrind = @import("instructions_cachegrind.zig");
 
 const testing = std.testing;
 
@@ -33,7 +35,7 @@ const FakeCounter = struct {
     long_less: bool = false,
     runs: *u64,
 
-    pub fn count(self: FakeCounter, program: []const u8, arguments: []const []const u8, rounds: u64) !instructions.cachegrind.Count {
+    pub fn count(self: FakeCounter, program: []const u8, arguments: []const []const u8, rounds: u64) !cachegrind.Count {
         std.debug.assert(std.mem.eql(u8, program, "bench"));
         self.runs.* += 1;
         const cost = self.cost_of(arguments[0]) orelse return .{ .failed = .{
@@ -114,7 +116,7 @@ test "check_config refuses a configuration the engine cannot run" {
         .{ .cases = &.{.{ .name = "a" ** 65 }} },
         .{ .cases = &.{ .{ .name = "a" }, .{ .name = "a" } } },
         .{ .cases = &.{.{ .name = "a" }}, .rounds = 0 },
-        .{ .cases = &.{.{ .name = "a", .rounds = instructions.baseline.rounds_max + 1 }} },
+        .{ .cases = &.{.{ .name = "a", .rounds = baseline.rounds_max + 1 }} },
     };
     inline for (refused) |config| try testing.expect(instructions.check_config(config) != null);
     try testing.expectEqual(null, instructions.check_config(.{ .cases = &.{.{ .name = "a" ** 64, .rounds = 1 << 32 }} }));

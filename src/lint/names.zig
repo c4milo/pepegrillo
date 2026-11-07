@@ -8,8 +8,8 @@
 //!
 //! A project calls them from its own tool, which imports the namespace its names are rooted at:
 //!
-//!     comptime names.assert_all_resolve(std, "std", &forbidden_prefixes);
-//!     comptime names.assert_all_match(std, "std", &forbidden_raw_prefixes);
+//!     comptime lint.assert_all_resolve(std, "std", &forbidden_prefixes);
+//!     comptime lint.assert_all_match(std, "std", &forbidden_raw_prefixes);
 //!
 //! `assert_all_resolve` reads a whole name, `std.testing.allocator`. `assert_all_match` reads a
 //! partial one, `std.posix.clock_`, and asks that some declaration begin with it. A name rooted

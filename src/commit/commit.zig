@@ -34,17 +34,20 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
-pub const arguments = @import("arguments.zig");
-pub const config = @import("config.zig");
-pub const findings = @import("findings.zig");
-pub const git_log = @import("git_log.zig");
-pub const message = @import("message.zig");
-pub const rules = @import("rules.zig");
-pub const subject = @import("subject.zig");
+const arguments = @import("arguments.zig");
+const config = @import("config.zig");
+const findings = @import("findings.zig");
+const git_log = @import("git_log.zig");
+const message = @import("message.zig");
+const rules = @import("rules.zig");
+const subject = @import("subject.zig");
 
 pub const Config = config.Config;
+pub const Finding = findings.Finding;
 pub const Findings = findings.Findings;
 pub const Severity = findings.Severity;
+pub const commit_types_default = config.commit_types_default;
+pub const trailer_keys_default = config.trailer_keys_default;
 
 /// Command-line arguments the linter reads before giving up.
 const arguments_max: usize = 1024;
@@ -91,7 +94,7 @@ fn parse(arena: Allocator, comptime project: Config, text: []const u8) !message.
 }
 
 /// The exit status a run with these findings ends with.
-pub fn exit_status(results: *const Findings) u8 {
+fn exit_status(results: *const Findings) u8 {
     return if (results.count_violations() == 0) exit_clean else exit_violations;
 }
 
@@ -127,7 +130,7 @@ fn lint(
 
 /// The command `--range` runs: `git log` over the revisions, its output capped at the project's
 /// `git_output_len_max`.
-pub fn range_command(
+fn range_command(
     arena: Allocator,
     comptime project: Config,
     revisions: []const []const u8,
@@ -181,6 +184,15 @@ pub fn main(init: std.process.Init, comptime project: Config) !void {
 // exit status.
 
 const testing = std.testing;
+
+test "the root exports these names alone" {
+    try @import("../public_names.zig").expect(@This(), &.{
+        "Config",               "Finding",              "Findings",     "Severity",
+        "commit_types_default", "trailer_keys_default", "lint_commits", "lint_message_text",
+        "run",                  "main",                 "exit_clean",   "exit_violations",
+        "exit_usage",
+    });
+}
 
 test {
     _ = arguments;

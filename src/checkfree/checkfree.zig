@@ -32,7 +32,7 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const report_line = @import("../report_line.zig");
 
-pub const assembly = @import("checkfree_assembly.zig");
+const assembly = @import("checkfree_assembly.zig");
 
 pub const Pin = struct {
     /// An exported symbol, which starts with the configuration's `prefix`.
@@ -121,7 +121,7 @@ fn count_file(arena: Allocator, comptime project: Config, text: []const u8, foun
 
 /// Writes a finding for each symbol whose count differs from its pin, and for each pin no file
 /// exports. Returns whether there was one.
-pub fn report(comptime project: Config, found: []const Pin, errors: *Io.Writer) !bool {
+fn report(comptime project: Config, found: []const Pin, errors: *Io.Writer) !bool {
     var differs = false;
     const location: report_line.Location = .{ .source = project.table };
     for (found) |each| {
@@ -193,4 +193,8 @@ test "the sample's symbols give the test project's pins" {
 
 test {
     _ = assembly;
+}
+
+test "the root exports these names alone" {
+    try @import("../public_names.zig").expect(@This(), &.{ "Pin", "Config", "check_config", "main", "run" });
 }
