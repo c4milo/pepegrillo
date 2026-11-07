@@ -38,7 +38,7 @@ const digits_any_scope: Config = blk: {
 test "scope_admits_digits decides whether a digit scope is refused" {
     const text = "feat(h2): add the frame reader\n";
     try expect_findings_with(letters, text, &.{
-        "violation: subject-format: the scope holds a byte that is not a lowercase letter or a " ++
+        "error: subject-format: the scope holds a byte that is not a lowercase letter or a " ++
             "hyphen: \"feat(h2): add the frame reader\"",
     });
     try expect_findings_with(digits_any_scope, text, &.{});
@@ -52,10 +52,10 @@ test "commit_types is the closed set the type is read against, and the set the m
     };
     try expect_findings_with(config, "wip: add the page cache\n", &.{});
     try expect_findings_with(config, "fix: add the page cache\n", &.{
-        "violation: subject-format: the type is not one of feat, wip: \"fix: add the page cache\"",
+        "error: subject-format: the type is not one of feat, wip: \"fix: add the page cache\"",
     });
     try expect_findings_with(letters, "wip: add the page cache\n", &.{
-        "violation: subject-format: the type is not one of " ++
+        "error: subject-format: the type is not one of " ++
             "feat, fix, docs, test, refactor, perf, build, ci, chore: \"wip: add the page cache\"",
     });
 }
@@ -81,11 +81,11 @@ test "unknown_scope_reason is printed between the scope and the known scopes" {
 test "unknown_scope_severity decides whether an unknown scope refuses the commit" {
     const config: Config = comptime blk: {
         var config = digits;
-        config.unknown_scope_severity = .violation;
+        config.unknown_scope_severity = .@"error";
         break :blk config;
     };
     try expect_findings_with(config, "feat(obj): add the page cache\n", &.{
-        "violation: scope-known: the scope \"obj\" is not one of the known scopes (store, net, h2)",
+        "error: scope-known: the scope \"obj\" is not one of the known scopes (store, net, h2)",
     });
     try expect_findings_with(digits, "feat(obj): add the page cache\n", &.{
         "warning: scope-known: the scope \"obj\" is not one of the known scopes (store, net, h2)",
@@ -98,14 +98,14 @@ test "third_person_forms is the list a first word is refused from" {
     const text = "fix: moves the reader\n";
     try expect_findings_with(letters, text, &.{});
     try expect_findings_with(digits, text, &.{
-        "violation: subject-description: \"moves\" is a third-person form, not imperative",
+        "error: subject-description: \"moves\" is a third-person form, not imperative",
     });
 }
 
 test "imperative_exceptions is read before the suffix test" {
     const text = "feat: string the fields together\n";
     try expect_findings_with(letters, text, &.{
-        "violation: subject-description: \"string\" is a gerund, not imperative",
+        "error: subject-description: \"string\" is a gerund, not imperative",
     });
     try expect_findings_with(digits, text, &.{});
 }
@@ -121,7 +121,7 @@ test "trailer_keys decides which final paragraph the body rules leave out" {
     const text = "feat: add x\n\none\n\ntwo\n\nthree\n\nChange-Id: I0123\n";
     try expect_findings_with(config, text, &.{});
     try expect_findings_with(letters, text, &.{
-        "violation: body-size: the body has 4 paragraphs, over the limit of 3",
+        "error: body-size: the body has 4 paragraphs, over the limit of 3",
     });
 }
 
@@ -139,7 +139,7 @@ test "subject_columns_max is the subject limit" {
     const config = comptime with_limits(letters, .{ .subject_columns_max = 20 });
     try expect_findings_with(config, "feat: " ++ ("w" ** 14) ++ "\n", &.{});
     try expect_findings_with(config, "feat: " ++ ("w" ** 15) ++ "\n", &.{
-        "violation: subject-length: the subject is 21 columns, over the 20-column limit",
+        "error: subject-length: the subject is 21 columns, over the 20-column limit",
     });
 }
 
@@ -147,7 +147,7 @@ test "body_columns_max is the body line limit" {
     const config = comptime with_limits(letters, .{ .body_columns_max = 10 });
     try expect_findings_with(config, "feat: add x\n\n" ++ ("w" ** 10) ++ "\n", &.{});
     try expect_findings_with(config, "feat: add x\n\n" ++ ("w" ** 11) ++ "\n", &.{
-        "violation: body-line-length: line 3 is 11 columns, over the 10-column limit",
+        "error: body-line-length: line 3 is 11 columns, over the 10-column limit",
     });
 }
 
@@ -156,8 +156,8 @@ test "body_paragraphs_max and body_words_max are the body size limits" {
     const config = comptime with_limits(letters, limits);
     try expect_findings_with(config, "feat: add x\n\none two three\n", &.{});
     try expect_findings_with(config, "feat: add x\n\none two\n\nthree four\n", &.{
-        "violation: body-size: the body has 2 paragraphs, over the limit of 1",
-        "violation: body-size: the body has 4 words, over the limit of 3",
+        "error: body-size: the body has 2 paragraphs, over the limit of 1",
+        "error: body-size: the body has 4 words, over the limit of 3",
     });
 }
 
@@ -165,7 +165,7 @@ test "trailing_blank_lines_max is the trailing blank line limit" {
     const config = comptime with_limits(letters, .{ .trailing_blank_lines_max = 0 });
     try expect_findings_with(config, "feat: add x\n", &.{});
     try expect_findings_with(config, "feat: add x\n\n", &.{
-        "violation: whitespace: the message ends with 1 blank lines, over the limit of 0",
+        "error: whitespace: the message ends with 1 blank lines, over the limit of 0",
     });
 }
 

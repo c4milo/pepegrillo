@@ -39,7 +39,7 @@ pub const Position = struct {
 /// Writes one finding as one line, with the message formatted from `format` and `arguments`.
 pub fn write(
     out: *Io.Writer,
-    location: Location,
+    location: *const Location,
     severity: Severity,
     rule: []const u8,
     comptime format: []const u8,
@@ -68,7 +68,7 @@ fn expect_line(
 ) !void {
     var buffer: [256]u8 = undefined;
     var out: Io.Writer = .fixed(&buffer);
-    try write(&out, location, severity, rule, "{s}", .{message});
+    try write(&out, &location, severity, rule, "{s}", .{message});
     try testing.expectEqualStrings(expected, out.buffered());
 }
 

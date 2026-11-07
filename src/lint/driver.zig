@@ -133,7 +133,7 @@ pub fn Linter(comptime rules: anytype) type {
         }
 
         /// Runs every enabled rule over one file.
-        pub fn dispatch(linter: *Self, file: report.File) !void {
+        pub fn dispatch(linter: *Self, file: *const report.File) !void {
             return dispatch_in(rules, linter, file);
         }
 
@@ -244,10 +244,10 @@ fn lint_file(comptime rules: anytype, linter: *Linter(rules), path: []const u8) 
         }
     }
     defer if (tree_pointer != null) tree.deinit(arena);
-    try dispatch_in(rules, linter, .{ .path = path, .source = source, .tree = tree_pointer });
+    try dispatch_in(rules, linter, &.{ .path = path, .source = source, .tree = tree_pointer });
 }
 
-fn dispatch_in(comptime rules: anytype, linter: *Linter(rules), file: report.File) !void {
+fn dispatch_in(comptime rules: anytype, linter: *Linter(rules), file: *const report.File) !void {
     inline for (rules, 0..) |rule, index| {
         if (linter.enabled[index]) try rule.check(&linter.context, file);
     }
@@ -261,10 +261,10 @@ fn report_parse_error(context: *report.Context, path: []const u8, tree: *const A
     tree.renderError(first, &writer) catch {};
     const location = tree.tokenLocation(0, first.token);
     try context.findings.add(
-        parse_rule_name,
         path,
         location.line + 1,
         location.column + 1,
+        parse_rule_name,
         "{s}",
         .{writer.buffered()},
     );
@@ -286,7 +286,7 @@ fn file_error(comptime rules: anytype, linter: *Linter(rules), path: []const u8,
 /// Writes the line for a file the walk cannot read: `path: error: [unreadable] reason`.
 pub fn write_file_error(out: *Io.Writer, path: []const u8, reason: []const u8) !void {
     const location: report_line.Location = .{ .source = path };
-    try report_line.write(out, location, .@"error", unreadable_rule_name, "{s}", .{reason});
+    try report_line.write(out, &location, .@"error", unreadable_rule_name, "{s}", .{reason});
 }
 
 fn print_usage(comptime rules: anytype) void {

@@ -148,7 +148,7 @@ fn check_scope_known(
     const reason = config.unknown_scope_reason;
     const list = comptime subject.joined(known);
     const format = "the scope \"{s}\" {s} ({s})";
-    try findings.record(config.unknown_scope_severity, source, scope_known_rule, format, .{
+    try findings.record(source, config.unknown_scope_severity, scope_known_rule, format, .{
         scope,
         reason,
         list,

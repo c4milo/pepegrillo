@@ -255,7 +255,7 @@ test "a file that does not parse is skipped" {
         \\}
     ;
     const file: report.File = .{ .path = "src/store/page.zig", .source = source, .tree = null };
-    try Rule.check(&context, file);
+    try Rule.check(&context, &file);
     try testing.expectEqual(0, context.findings.count());
 }
 

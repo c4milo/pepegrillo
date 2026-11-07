@@ -48,7 +48,7 @@ pub fn Rule(comptime config: Config) type {
         pub const name = config.name;
         const settings: Config = config;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!settings.scope.applies(file.path)) return;
             const tree = file.tree orelse return;
             var visitor: Visitor = .{
@@ -119,10 +119,10 @@ const Visitor = struct {
         if (!is_magic(literal, self.config.literal_max)) return;
         const location = ast.node_location(self.tree, node);
         try self.findings.add(
-            self.config.name,
             self.path,
             location.line,
             location.column,
+            self.config.name,
             "integer literal {s}",
             .{literal},
         );

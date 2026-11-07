@@ -46,7 +46,6 @@ const subject = @import("subject.zig");
 pub const Config = config.Config;
 pub const Finding = findings.Finding;
 pub const Findings = findings.Findings;
-pub const Severity = findings.Severity;
 pub const check_config = config.check_config;
 pub const commit_types_default = config.commit_types_default;
 pub const trailer_keys_default = config.trailer_keys_default;
@@ -97,7 +96,7 @@ fn parse(arena: Allocator, comptime project: Config, text: []const u8) !message.
 
 /// The exit status a run with these findings ends with.
 fn exit_status(results: *const Findings) u8 {
-    return if (results.count_violations() == 0) exit_clean else exit_violations;
+    return if (results.count_errors() == 0) exit_clean else exit_violations;
 }
 
 fn lint_message_file(
@@ -184,10 +183,11 @@ const testing = std.testing;
 
 test "the root exports these names alone" {
     try @import("../public_names.zig").expect(@This(), &.{
-        "Config",               "Finding",              "Findings",     "Severity",
-        "commit_types_default", "trailer_keys_default", "lint_commits", "lint_message_text",
-        "run",                  "main",                 "exit_clean",   "exit_violations",
-        "exit_usage",           "check_config",
+        "Config",               "Finding",              "Findings",
+        "commit_types_default", "trailer_keys_default", "lint_commits",
+        "lint_message_text",    "run",                  "main",
+        "exit_clean",           "exit_violations",      "exit_usage",
+        "check_config",
     });
 }
 
@@ -269,7 +269,7 @@ test "a warning alone leaves the exit status clean" {
     const log = "aaa\x00ppp\x00feat(frobnicator): add the page cache\n\x00\n";
     try lint_commits(arena, scoped_config, &results, log);
     try testing.expectEqual(1, results.count());
-    try testing.expectEqual(0, results.count_violations());
+    try testing.expectEqual(0, results.count_errors());
     try testing.expectEqualStrings(rules.scope_known_rule, results.items.items[0].rule);
     try testing.expectEqual(exit_clean, exit_status(&results));
 }

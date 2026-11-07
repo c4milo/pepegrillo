@@ -94,7 +94,7 @@ pub fn main(init: std.process.Init, comptime project: Config) !void {
 /// directory when it names none. Returns the exit status.
 pub fn run(context: *const Context, comptime project: Config, given: []const []const u8) !u8 {
     const jar = verified_jar(context, project) catch |failure| {
-        try report_line.write(context.errors, .{ .source = project.models_directory }, .@"error", rule, "TLC cannot run: {t}", .{failure});
+        try report_line.write(context.errors, &.{ .source = project.models_directory }, .@"error", rule, "TLC cannot run: {t}", .{failure});
         return exit_unusable;
     };
     const configurations = if (given.len == 0)
@@ -102,7 +102,7 @@ pub fn run(context: *const Context, comptime project: Config, given: []const []c
     else
         try named(context.arena, given);
     if (configurations.len == 0) {
-        try report_line.write(context.errors, .{ .source = project.models_directory }, .@"error", rule, "no TLC configuration found", .{});
+        try report_line.write(context.errors, &.{ .source = project.models_directory }, .@"error", rule, "no TLC configuration found", .{});
         return exit_unusable;
     }
     var status = exit_success;
@@ -139,7 +139,7 @@ fn check(context: *const Context, comptime project: Config, jar: []const u8, con
     const path = try std.fs.path.join(context.arena, &.{ configuration.model_directory, configuration.relative_path });
     const location: report_line.Location = .{ .source = path };
     const plan = planned(context, configuration, path) catch |failure| {
-        try report_line.write(context.out, location, .@"error", rule, "{s}", .{plan_failure(failure)});
+        try report_line.write(context.out, &location, .@"error", rule, "{s}", .{plan_failure(failure)});
         return false;
     };
     const states = try tlc.states_path(context.arena, context.environ, try state_label(context.arena, path));
@@ -161,10 +161,10 @@ fn check(context: *const Context, comptime project: Config, jar: []const u8, con
     const verdict = tlc.verdict_of(result.term);
     const states_count = tlc.states_found(result.stdout);
     if (matches(verdict, plan.expect)) {
-        try report_line.write(context.out, location, .note, rule, "{t}, as expected, {?d} distinct states", .{ plan.expect, states_count });
+        try report_line.write(context.out, &location, .note, rule, "{t}, as expected, {?d} distinct states", .{ plan.expect, states_count });
         return true;
     }
-    try report_line.write(context.out, location, .@"error", rule, "expected {t}, found {s}", .{ plan.expect, describe(verdict) });
+    try report_line.write(context.out, &location, .@"error", rule, "expected {t}, found {s}", .{ plan.expect, describe(verdict) });
     try write_tail(context.errors, result.stdout);
     try write_tail(context.errors, result.stderr);
     return false;

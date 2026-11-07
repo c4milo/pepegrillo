@@ -4,36 +4,18 @@
 //!
 //!     source: error: [rule-name] message
 //!
-//! The source is the commit sha in `--range` mode and the file path in `--message` mode. A
-//! violation, which refuses the commit, prints as `error`, and a warning, which only reports on
-//! it, prints as `warning`. The exit status reads `count_violations`, so a run with warnings alone
-//! is clean.
+//! The source is the commit sha in `--range` mode and the file path in `--message` mode. A finding
+//! that refuses the commit prints as `error`, and one that only reports on it prints as `warning`.
+//! The exit status reads `count_errors`, so a run with warnings alone is clean.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const report_line = @import("../report_line.zig");
 
-/// Whether a finding refuses the commit or only reports on it.
-pub const Severity = enum {
-    violation,
-    warning,
-
-    pub fn text(self: Severity) []const u8 {
-        return switch (self) {
-            .violation => "violation",
-            .warning => "warning",
-        };
-    }
-
-    /// The severity the report line prints: a violation fails the run, as an `error` does.
-    pub fn line_severity(self: Severity) report_line.Severity {
-        return switch (self) {
-            .violation => .@"error",
-            .warning => .warning,
-        };
-    }
-};
+/// How much a finding weighs: `error` refuses the commit, as it fails any tool's run, and
+/// `warning` only reports on it.
+const Severity = report_line.Severity;
 
 pub const Finding = struct {
     /// The commit sha, or the message file path.
@@ -57,7 +39,7 @@ pub const Findings = struct {
         comptime format: []const u8,
         arguments: anytype,
     ) !void {
-        try self.record(.violation, source, rule, format, arguments);
+        try self.record(source, .@"error", rule, format, arguments);
     }
 
     /// Records a finding that is reported and does not refuse the commit.
@@ -68,13 +50,13 @@ pub const Findings = struct {
         comptime format: []const u8,
         arguments: anytype,
     ) !void {
-        try self.record(.warning, source, rule, format, arguments);
+        try self.record(source, .warning, rule, format, arguments);
     }
 
     pub fn record(
         self: *Findings,
-        severity: Severity,
         source: []const u8,
+        severity: Severity,
         rule: []const u8,
         comptime format: []const u8,
         arguments: anytype,
@@ -93,10 +75,10 @@ pub const Findings = struct {
     }
 
     /// Findings that refuse the commit. The exit status reads this, not `count`.
-    pub fn count_violations(self: *const Findings) usize {
+    pub fn count_errors(self: *const Findings) usize {
         var total: usize = 0;
         for (self.items.items) |finding| {
-            if (finding.severity == .violation) total += 1;
+            if (finding.severity == .@"error") total += 1;
         }
         return total;
     }
@@ -105,8 +87,7 @@ pub const Findings = struct {
     pub fn write(self: *const Findings, out: *Io.Writer) !void {
         for (self.items.items) |finding| {
             const location: report_line.Location = .{ .source = finding.source };
-            const severity = finding.severity.line_severity();
-            try report_line.write(out, location, severity, finding.rule, "{s}", .{finding.message});
+            try report_line.write(out, &location, finding.severity, finding.rule, "{s}", .{finding.message});
         }
     }
 };
@@ -134,16 +115,18 @@ test "write prints source, severity, rule and message in the order recorded" {
     );
 }
 
-test "count_violations counts violations and leaves warnings out" {
+test "count_errors counts errors and leaves warnings and notes out" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     var findings: Findings = .{ .arena = arena_state.allocator(), .findings_max = 4 };
     try findings.warn("a", "scope-known", "w", .{});
     try testing.expectEqual(1, findings.count());
-    try testing.expectEqual(0, findings.count_violations());
-    try findings.record(.violation, "a", "whitespace", "v", .{});
-    try testing.expectEqual(2, findings.count());
-    try testing.expectEqual(1, findings.count_violations());
+    try testing.expectEqual(0, findings.count_errors());
+    try findings.record("a", .note, "whitespace", "n", .{});
+    try testing.expectEqual(0, findings.count_errors());
+    try findings.record("a", .@"error", "whitespace", "v", .{});
+    try testing.expectEqual(3, findings.count());
+    try testing.expectEqual(1, findings.count_errors());
 }
 
 test "a finding past findings_max is an error, never dropped" {

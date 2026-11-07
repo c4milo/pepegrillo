@@ -70,7 +70,7 @@ pub const Cachegrind = struct {
     }
 
     /// The instructions `program` retires when it runs with `arguments` and then `rounds`.
-    pub fn count(self: Cachegrind, program: []const u8, arguments: []const []const u8, rounds: u64) !Count {
+    pub fn count(self: *const Cachegrind, program: []const u8, arguments: []const []const u8, rounds: u64) !Count {
         const result = try std.process.run(self.arena, self.io, .{
             .argv = try argv(self.arena, self.valgrind_program, program, arguments, rounds),
             .stdout_limit = .limited(output_len_max),

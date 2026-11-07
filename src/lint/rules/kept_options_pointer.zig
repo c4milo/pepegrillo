@@ -64,7 +64,7 @@ pub fn Rule(comptime config: Config) type {
         pub const name = config.name;
         const settings: Config = config;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!settings.scope.applies(file.path)) return;
             const tree = file.tree orelse return;
             var visitor: Visitor = .{
@@ -234,10 +234,10 @@ const Body = struct {
         const parameter = body.kept_pointer(value) orelse return;
         const location = ast.node_start_location(body.visitor.tree, value);
         body.visitor.findings.add(
-            body.visitor.name,
             body.visitor.path,
             location.line,
             location.column,
+            body.visitor.name,
             "{s} keeps the *const parameter {s} in .{s} after it returns: copy what it keeps",
             .{ body.function_name, parameter, field_name },
         ) catch |failure| {

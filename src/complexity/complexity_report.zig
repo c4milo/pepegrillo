@@ -215,7 +215,7 @@ pub fn print_report(out: *Io.Writer, report: *Report, options: Options) !u8 {
         };
         const severity: report_line.Severity = if (over) .@"error" else .note;
         const message = "{s} scored {d} (max {d})";
-        try report_line.write(out, location, severity, score_rule_name, message, .{
+        try report_line.write(out, &location, severity, score_rule_name, message, .{
             scored.name, scored.score, options.score_max,
         });
     }
@@ -223,7 +223,7 @@ pub fn print_report(out: *Io.Writer, report: *Report, options: Options) !u8 {
     std.mem.sort(Unscored, unscored, {}, unscored_before);
     for (unscored) |file| {
         const location: report_line.Location = .{ .source = file.path };
-        try report_line.write(out, location, .@"error", unscored_rule_name, "{s}", .{file.reason});
+        try report_line.write(out, &location, .@"error", unscored_rule_name, "{s}", .{file.reason});
     }
     return print_summary(out, .{
         .scored = scores.len,

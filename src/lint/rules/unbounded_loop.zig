@@ -112,13 +112,13 @@ pub fn Rule(comptime config: Config) type {
     return struct {
         pub const name = config.name;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             return check_file(config, context, file);
         }
     };
 }
 
-fn check_file(comptime config: Config, context: *report.Context, file: report.File) !void {
+fn check_file(comptime config: Config, context: *report.Context, file: *const report.File) !void {
     if (!config.scope.applies(file.path)) return;
     const tree = file.tree orelse return;
     var walker: Walker(config) = .{
@@ -235,7 +235,7 @@ fn add(
 ) !void {
     const location = ast.node_location(walker.tree, node);
     const findings = walker.findings;
-    try findings.add(config.name, walker.path, location.line, location.column, format, arguments);
+    try findings.add(walker.path, location.line, location.column, config.name, format, arguments);
 }
 
 test {

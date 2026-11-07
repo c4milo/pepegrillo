@@ -61,14 +61,14 @@ test "a scope CLAUDE.md does not name draws a warning, and a digit is refused" {
             "(lint, complexity, commit, tla, lean, instructions, checkfree, hooks, build)",
     });
     try expect_findings("feat(h2): add the reader\n", &.{
-        "violation: subject-format: the scope holds a byte that is not a lowercase letter or a " ++
+        "error: subject-format: the scope holds a byte that is not a lowercase letter or a " ++
             "hyphen: \"feat(h2): add the reader\"",
     });
 }
 
 test "a third-person first word is refused and a listed exception passes" {
     try expect_findings("fix(lint): moves the reader\n", &.{
-        "violation: subject-description: \"moves\" is a third-person form, not imperative",
+        "error: subject-description: \"moves\" is a third-person form, not imperative",
     });
     try expect_findings("fix(lint): string the fields together\n", &.{});
 }

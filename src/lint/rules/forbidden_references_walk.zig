@@ -133,11 +133,11 @@ const Visitor = struct {
         const column = location.column;
         const name = self.config.name;
         const reason = self.config.reason orelse {
-            return self.findings.add(name, self.path, line, column, "reference to {s}", .{
+            return self.findings.add(self.path, line, column, name, "reference to {s}", .{
                 identifier,
             });
         };
-        try self.findings.add(name, self.path, line, column, "reference to {s}: {s}", .{
+        try self.findings.add(self.path, line, column, name, "reference to {s}: {s}", .{
             identifier, reason,
         });
     }
@@ -153,9 +153,9 @@ const Visitor = struct {
         const name = self.config.name;
         const format = "reference to {s} through {s}";
         const reason = self.config.reason orelse {
-            return self.findings.add(name, self.path, line, column, format, .{ resolved, alias });
+            return self.findings.add(self.path, line, column, name, format, .{ resolved, alias });
         };
-        try self.findings.add(name, self.path, line, column, format ++ ": {s}", .{
+        try self.findings.add(self.path, line, column, name, format ++ ": {s}", .{
             resolved, alias, reason,
         });
     }
@@ -170,11 +170,11 @@ const Visitor = struct {
         const column = location.column;
         const name = self.config.name;
         const reason = self.config.reason orelse {
-            return self.findings.add(name, self.path, line, column, "{s} takes {s}", .{
+            return self.findings.add(self.path, line, column, name, "{s} takes {s}", .{
                 function_name, description,
             });
         };
-        try self.findings.add(name, self.path, line, column, "{s} takes {s}: {s}", .{
+        try self.findings.add(self.path, line, column, name, "{s} takes {s}: {s}", .{
             function_name, description, reason,
         });
     }

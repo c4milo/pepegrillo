@@ -33,7 +33,7 @@ pub fn Rule(comptime config: Config) type {
         pub const name = config.name;
         const settings: Config = config;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!settings.scope.applies(file.path)) return;
             const tree = file.tree orelse return;
             var visitor: Visitor = .{
@@ -84,10 +84,10 @@ const Visitor = struct {
         const name_token = declaration.ast.mut_token + 1;
         const location = ast.token_location(self.tree, name_token);
         try self.findings.add(
-            self.name,
             self.path,
             location.line,
             location.column,
+            self.name,
             "var {s} is state every thread shares: make it threadlocal, or hand it in",
             .{self.tree.tokenSlice(name_token)},
         );

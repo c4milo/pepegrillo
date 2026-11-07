@@ -45,14 +45,14 @@ pub fn Rule(comptime config: Config) type {
         pub const name = config.name;
         const settings: Config = config;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!settings.scope.applies(file.path)) return;
             try check_lines(context, file, &settings);
         }
     };
 }
 
-fn check_lines(context: *report.Context, file: report.File, config: *const Config) !void {
+fn check_lines(context: *report.Context, file: *const report.File, config: *const Config) !void {
     var lines: text.LineIterator = .{ .source = file.source };
     while (lines.next()) |line| {
         const reader: LineReader = .{
@@ -98,7 +98,7 @@ const LineReader = struct {
 
     fn add(self: *const LineReader, index: usize, label: []const u8, written: []const u8) !void {
         const name = self.config.name;
-        try self.findings.add(name, self.path, self.line.number, index + 1, "{s} \"{s}\"", .{
+        try self.findings.add(self.path, self.line.number, index + 1, name, "{s} \"{s}\"", .{
             label, written,
         });
     }

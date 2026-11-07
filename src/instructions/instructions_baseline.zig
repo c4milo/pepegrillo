@@ -44,7 +44,7 @@ pub const Environment = struct {
     zig: []const u8,
     target: []const u8,
 
-    pub fn eql(self: Environment, other: Environment) bool {
+    pub fn eql(self: *const Environment, other: *const Environment) bool {
         return std.mem.eql(u8, self.counter, other.counter) and
             std.mem.eql(u8, self.zig, other.zig) and
             std.mem.eql(u8, self.target, other.target);
@@ -209,7 +209,7 @@ test "render writes a baseline that read gives back, with each case's position" 
     const text = try render(arena, environment_fixture, &entries);
     const result = try read_text(arena, &tmp, text);
     const file = result.baseline.file;
-    try testing.expect(file.environment().eql(environment_fixture));
+    try testing.expect(file.environment().eql(&environment_fixture));
     try testing.expectEqual(2, file.cases.len);
     try testing.expectEqualDeep(entries[1], file.entry("query-build").?);
     try testing.expectEqual(null, file.entry("cache-miss"));
@@ -254,16 +254,16 @@ test "read refuses zero rounds, rounds past the limit, no instructions and a cas
 }
 
 test "Environment.eql compares the counter, the Zig release and the target" {
-    try testing.expect(environment_fixture.eql(environment_fixture));
+    try testing.expect(environment_fixture.eql(&environment_fixture));
     var other = environment_fixture;
     other.counter = "cachegrind 3.23.0";
-    try testing.expect(!environment_fixture.eql(other));
+    try testing.expect(!environment_fixture.eql(&other));
     other = environment_fixture;
     other.zig = "0.17.0";
-    try testing.expect(!environment_fixture.eql(other));
+    try testing.expect(!environment_fixture.eql(&other));
     other = environment_fixture;
     other.target = "x86_64-linux";
-    try testing.expect(!environment_fixture.eql(other));
+    try testing.expect(!environment_fixture.eql(&other));
 }
 
 test "write replaces a baseline through a partial file and leaves none behind" {

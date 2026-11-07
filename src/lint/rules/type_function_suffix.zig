@@ -39,7 +39,7 @@ pub fn Rule(comptime config: Config) type {
         pub const name = config.name;
         const settings: Config = config;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!settings.scope.applies(file.path)) return;
             const tree = file.tree orelse return;
             var visitor: Visitor = .{
@@ -91,10 +91,10 @@ const Visitor = struct {
         const stem = function_name[0 .. function_name.len - suffix.len];
         const location = ast.token_location(self.tree, name_token);
         try self.findings.add(
-            self.name,
             self.path,
             location.line,
             location.column,
+            self.name,
             "pub fn {s} returns a type: name it {s}, for the thing it returns," ++
                 " as std names ArrayList and StaticBitSet",
             .{ function_name, stem },

@@ -93,7 +93,7 @@ pub fn Rule(comptime config: Config) type {
     return struct {
         pub const name = config.name;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!config.scope.applies(file.path)) return;
             var scanner: Scanner = .{ .findings = &context.findings, .path = file.path };
             var lines: text.LineIterator = .{ .source = file.source };
@@ -208,7 +208,7 @@ const Scanner = struct {
         comptime format: []const u8,
         arguments: anytype,
     ) !void {
-        try self.findings.add(config.name, self.path, line_number, column, format, arguments);
+        try self.findings.add(self.path, line_number, column, config.name, format, arguments);
     }
 };
 

@@ -1,6 +1,7 @@
 //! What one lint run accumulates and what it hands each rule.
 //!
-//! A rule receives a `Context` and a `File` and calls `context.findings.add` once per finding.
+//! A rule receives a `Context` and a `File` and calls `context.findings.add` once per finding, with
+//! the location first, then the rule name, as `report_line.write` takes them.
 //! `driver.zig` sorts the findings by path, line, column and rule name, so the report reads the
 //! same whatever order the directory walk visited the files in, and prints one line per finding in
 //! the shape `report_line.zig` defines:
@@ -45,10 +46,10 @@ pub const Findings = struct {
     /// about to overwrite.
     pub fn add(
         self: *Findings,
-        rule: []const u8,
         path: []const u8,
         line: usize,
         column: usize,
+        rule: []const u8,
         comptime format: []const u8,
         arguments: anytype,
     ) !void {
@@ -78,7 +79,7 @@ pub const Findings = struct {
                 .position = .{ .line = finding.line, .column = finding.column },
             };
             const message = finding.message;
-            try report_line.write(out, location, .@"error", finding.rule, "{s}", .{message});
+            try report_line.write(out, &location, .@"error", finding.rule, "{s}", .{message});
         }
     }
 };
@@ -124,11 +125,11 @@ test "findings sort by path, then line, then column, then rule" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     var findings: Findings = .{ .arena = arena_state.allocator() };
-    try findings.add("b-rule", "b.zig", 1, 1, "", .{});
-    try findings.add("a-rule", "a.zig", 9, 1, "", .{});
-    try findings.add("a-rule", "a.zig", 2, 5, "", .{});
-    try findings.add("a-rule", "a.zig", 2, 3, "", .{});
-    try findings.add("z-rule", "a.zig", 2, 3, "", .{});
+    try findings.add("b.zig", 1, 1, "b-rule", "", .{});
+    try findings.add("a.zig", 9, 1, "a-rule", "", .{});
+    try findings.add("a.zig", 2, 5, "a-rule", "", .{});
+    try findings.add("a.zig", 2, 3, "a-rule", "", .{});
+    try findings.add("a.zig", 2, 3, "z-rule", "", .{});
     findings.sort();
     const items = findings.items.items;
     try testing.expectEqualStrings("a.zig", items[0].path);
@@ -146,7 +147,7 @@ test "write prints path:line:column: error: [rule] message" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     var findings: Findings = .{ .arena = arena };
-    try findings.add("heap", "src/core/core.zig", 3, 7, "reference to {s}", .{"std.heap"});
+    try findings.add("src/core/core.zig", 3, 7, "heap", "reference to {s}", .{"std.heap"});
     var writer: Io.Writer.Allocating = .init(arena);
     defer writer.deinit();
     try findings.write(&writer.writer);
@@ -161,7 +162,7 @@ test "add copies the path" {
     defer arena_state.deinit();
     var findings: Findings = .{ .arena = arena_state.allocator() };
     var path_buffer: [8]u8 = "a.zig\x00\x00\x00".*;
-    try findings.add("heap", path_buffer[0..5], 1, 1, "", .{});
+    try findings.add(path_buffer[0..5], 1, 1, "heap", "", .{});
     path_buffer[0] = 'z';
     try testing.expectEqualStrings("a.zig", findings.items.items[0].path);
     try testing.expectEqual(1, findings.count());

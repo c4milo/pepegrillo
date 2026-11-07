@@ -37,7 +37,7 @@ const FakeCounter = struct {
     long_less: bool = false,
     runs: *u64,
 
-    pub fn count(self: FakeCounter, program: []const u8, arguments: []const []const u8, rounds: u64) !cachegrind.Count {
+    pub fn count(self: *const FakeCounter, program: []const u8, arguments: []const []const u8, rounds: u64) !cachegrind.Count {
         std.debug.assert(std.mem.eql(u8, program, "bench"));
         self.runs.* += 1;
         const cost = self.cost_of(arguments[0]) orelse return .{ .failed = .{

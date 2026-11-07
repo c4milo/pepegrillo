@@ -28,7 +28,7 @@ pub fn run(
         try testing.expectEqual(0, tree.errors.len);
         tree_pointer = &tree;
     }
-    try rule.check(&context, .{ .path = path, .source = source, .tree = tree_pointer });
+    try rule.check(&context, &.{ .path = path, .source = source, .tree = tree_pointer });
     context.findings.sort();
     return context.findings.items.items;
 }

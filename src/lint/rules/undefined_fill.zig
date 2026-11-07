@@ -72,7 +72,7 @@ pub fn Rule(comptime config: Config) type {
         pub const name = config.name;
         const settings: Config = config;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!settings.scope.applies(file.path)) return;
             const tree = file.tree orelse return;
             var visitor: Visitor = .{
@@ -143,10 +143,10 @@ const Visitor = struct {
         if (self.is_allowed(variable)) return;
         const location = ast.token_location(self.tree, name_token);
         try self.findings.add(
-            self.settings.name,
             self.path,
             location.line,
             location.column,
+            self.settings.name,
             "var {s} is an array set to undefined, which Debug and ReleaseSafe fill on every call: " ++
                 "write into the caller's memory, or declare it only where it is used",
             .{variable},

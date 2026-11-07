@@ -9,7 +9,7 @@
 //! it at compile time, so such a configuration does not build.
 
 const std = @import("std");
-const Severity = @import("findings.zig").Severity;
+const Severity = @import("../report_line.zig").Severity;
 
 /// The Conventional Commit types a subject may name when a project states none.
 pub const commit_types_default = [_][]const u8{
@@ -67,7 +67,7 @@ pub const Config = struct {
     /// The words the `scope-known` finding prints, as
     /// `the scope "NAME" <unknown_scope_reason> (KNOWN, SCOPES)`.
     unknown_scope_reason: []const u8 = unknown_scope_reason_default,
-    /// Whether an unknown scope refuses the commit or is only reported.
+    /// Whether an unknown scope refuses the commit, `error`, or is only reported, `warning`.
     unknown_scope_severity: Severity = .warning,
     /// First words that describe the commit instead of commanding it: `adds`, `fixes`.
     third_person_forms: []const []const u8,

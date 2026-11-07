@@ -32,15 +32,15 @@ pub fn Rule(comptime config: Config) type {
     return struct {
         pub const name = config.name;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!config.scope.applies(file.path)) return;
             const lines = text.count_lines(file.source);
             if (lines <= config.lines_max) return;
             try context.findings.add(
-                name,
                 file.path,
                 config.lines_max + 1,
                 1,
+                name,
                 "{d} lines, over the {d}-line limit{s}",
                 .{ lines, config.lines_max, config.message_suffix },
             );

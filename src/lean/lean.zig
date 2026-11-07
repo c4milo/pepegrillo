@@ -79,7 +79,7 @@ pub fn run(context: *const Context, comptime project: Config, given: []const []c
     const errors = context.errors;
     const toolchain = try std.fs.path.join(arena, &.{ project.directory, toolchain_file });
     Io.Dir.cwd().access(io, toolchain, .{}) catch {
-        try report_line.write(errors, .{ .source = toolchain }, .@"error", rule, "missing: a Lean project pins its release there", .{});
+        try report_line.write(errors, &.{ .source = toolchain }, .@"error", rule, "missing: a Lean project pins its release there", .{});
         return exit_unusable;
     };
     for (try lake_candidates(arena, context.environ)) |lake| {
@@ -93,7 +93,7 @@ pub fn run(context: *const Context, comptime project: Config, given: []const []c
         const term = try child.wait(io);
         return status_of(term);
     }
-    try report_line.write(errors, .{ .source = project.directory }, .@"error", rule, "no lake on PATH or at $HOME/{s}; install elan", .{elan_lake});
+    try report_line.write(errors, &.{ .source = project.directory }, .@"error", rule, "no lake on PATH or at $HOME/{s}; install elan", .{elan_lake});
     return exit_unusable;
 }
 

@@ -70,16 +70,17 @@ fn check(context: *const Context, comptime project: Config, counter: anytype, in
     const file, const source = switch (try baseline.read(context.arena, context.io, invocation.baseline)) {
         .baseline => |found| .{ found.file, found.source },
         .missing => {
-            try report_line.write(context.errors, whole, .@"error", rule, "missing: write it with {s}", .{rewrite_flag});
+            try report_line.write(context.errors, &whole, .@"error", rule, "missing: write it with {s}", .{rewrite_flag});
             return exit_unusable;
         },
         .malformed => |problem| {
-            try report_line.write(context.errors, .{ .source = invocation.baseline, .position = problem.position }, .@"error", rule, "{s}", .{problem.message});
+            try report_line.write(context.errors, &.{ .source = invocation.baseline, .position = problem.position }, .@"error", rule, "{s}", .{problem.message});
             return exit_unusable;
         },
     };
-    if (!file.environment().eql(environment)) {
-        try report_line.write(context.errors, whole, .@"error", rule, "was counted by {s} under Zig {s} on {s}, and this run counts by {s} under Zig {s} on {s}: write it anew with {s}", .{
+    const recorded = file.environment();
+    if (!recorded.eql(&environment)) {
+        try report_line.write(context.errors, &whole, .@"error", rule, "was counted by {s} under Zig {s} on {s}, and this run counts by {s} under Zig {s} on {s}: write it anew with {s}", .{
             file.counter, file.zig, file.target, environment.counter, environment.zig, environment.target, rewrite_flag,
         });
         return exit_unusable;
@@ -104,13 +105,13 @@ fn check_case(
 ) !bool {
     const location: report_line.Location = .{ .source = invocation.baseline, .position = baseline.position_of(source, case.name) };
     const entry = file.entry(case.name) orelse {
-        try report_line.write(context.out, location, .@"error", rule, "holds no count for case {s}: write it anew with {s}", .{ case.name, rewrite_flag });
+        try report_line.write(context.out, &location, .@"error", rule, "holds no count for case {s}: write it anew with {s}", .{ case.name, rewrite_flag });
         return false;
     };
-    const measurement = try counted(context, project, counter, invocation.program, case, location) orelse return false;
+    const measurement = try counted(context, project, counter, invocation.program, case, &location) orelse return false;
     const before = entry.measurement();
     const verdict = measure.judge(before, measurement, project.threshold_per_mille);
-    try report_verdict(context.out, location, case.name, before, measurement, verdict, project.threshold_per_mille);
+    try report_verdict(context.out, &location, case.name, before, measurement, verdict, project.threshold_per_mille);
     return verdict == .within;
 }
 
@@ -121,7 +122,7 @@ fn counted(
     counter: anytype,
     program: []const u8,
     case: Case,
-    location: report_line.Location,
+    location: *const report_line.Location,
 ) !?measure.Measurement {
     const rounds = case.rounds orelse project.rounds;
     const totals = switch (try totals_of(counter, program, case.arguments, rounds)) {
@@ -171,7 +172,7 @@ fn write_tail(errors: *Io.Writer, output: []const u8) !void {
 
 fn report_verdict(
     out: *Io.Writer,
-    location: report_line.Location,
+    location: *const report_line.Location,
     name: []const u8,
     before: measure.Measurement,
     now: measure.Measurement,
@@ -194,7 +195,7 @@ fn report_unnamed(context: *const Context, comptime project: Config, invocation:
     for (file.cases) |entry| {
         if (named(project, entry.name)) continue;
         const location: report_line.Location = .{ .source = invocation.baseline, .position = baseline.position_of(source, entry.name) };
-        try report_line.write(context.out, location, .@"error", rule, "counts case {s}, which the configuration does not name: write it anew with {s}", .{ entry.name, rewrite_flag });
+        try report_line.write(context.out, &location, .@"error", rule, "counts case {s}, which the configuration does not name: write it anew with {s}", .{ entry.name, rewrite_flag });
         found = true;
     }
     return found;
@@ -214,14 +215,14 @@ fn rewrite(context: *const Context, comptime project: Config, counter: anytype, 
         if (try rewritten(context, project, counter, invocation, case)) |entry| try entries.append(context.arena, entry);
     }
     if (entries.items.len != project.cases.len) {
-        try report_line.write(context.errors, .{ .source = invocation.baseline }, .@"error", rule, "not written: {d} of {d} cases could not be counted", .{ project.cases.len - entries.items.len, project.cases.len });
+        try report_line.write(context.errors, &.{ .source = invocation.baseline }, .@"error", rule, "not written: {d} of {d} cases could not be counted", .{ project.cases.len - entries.items.len, project.cases.len });
         return exit_moved;
     }
     const text = try baseline.render(context.arena, environment, entries.items);
     try baseline.write(context.arena, context.io, invocation.baseline, text);
     for (entries.items) |entry| {
         const location: report_line.Location = .{ .source = invocation.baseline, .position = baseline.position_of(text, entry.name) };
-        try report_line.write(context.out, location, .note, rule, "{s}: wrote {d:.1} instructions per operation", .{ entry.name, entry.measurement().per_operation() });
+        try report_line.write(context.out, &location, .note, rule, "{s}: wrote {d:.1} instructions per operation", .{ entry.name, entry.measurement().per_operation() });
     }
     return exit_success;
 }
@@ -229,9 +230,9 @@ fn rewrite(context: *const Context, comptime project: Config, counter: anytype, 
 /// One case's entry for a new baseline, or null after reporting why it has none.
 fn rewritten(context: *const Context, comptime project: Config, counter: anytype, invocation: *const Invocation, case: Case) !?baseline.Entry {
     const location: report_line.Location = .{ .source = invocation.baseline };
-    const measurement = try counted(context, project, counter, invocation.program, case, location) orelse return null;
+    const measurement = try counted(context, project, counter, invocation.program, case, &location) orelse return null;
     if (measurement.instructions == 0) {
-        try report_line.write(context.out, location, .@"error", rule, "{s} counted no instructions per operation; the program runs one operation per round", .{case.name});
+        try report_line.write(context.out, &location, .@"error", rule, "{s} counted no instructions per operation; the program runs one operation per round", .{case.name});
         return null;
     }
     return .{ .name = case.name, .rounds = measurement.rounds, .instructions = measurement.instructions };

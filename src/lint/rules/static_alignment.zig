@@ -52,7 +52,7 @@ pub fn Rule(comptime config: Config) type {
         pub const name = config.name;
         const settings: Config = config;
 
-        pub fn check(context: *report.Context, file: report.File) !void {
+        pub fn check(context: *report.Context, file: *const report.File) !void {
             if (!settings.scope.applies(file.path)) return;
             const tree = file.tree orelse return;
             var visitor: Visitor = .{
@@ -105,20 +105,20 @@ const Visitor = struct {
         const location = ast.token_location(self.tree, name_token);
         const type_node = declaration.ast.type_node.unwrap() orelse {
             return self.findings.add(
-                self.name,
                 self.path,
                 location.line,
                 location.column,
+                self.name,
                 "var {s} declares no type, so its alignment cannot be stated: declare both",
                 .{variable},
             );
         };
         const element = element_needing_alignment(self.tree, type_node) orelse return;
         try self.findings.add(
-            self.name,
             self.path,
             location.line,
             location.column,
+            self.name,
             "var {s} declares no alignment: write align(@alignOf({s}))",
             .{ variable, self.tree.getNodeSource(element) },
         );

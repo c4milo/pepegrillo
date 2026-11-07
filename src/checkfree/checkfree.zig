@@ -99,13 +99,13 @@ pub fn run(context: *const Context, comptime project: Config, given: []const []c
     const record = given.len > 0 and std.mem.eql(u8, given[0], record_flag);
     const paths = given[@intFromBool(record)..];
     if (paths.len == 0) {
-        try report_line.write(errors, .{ .source = rule }, .@"error", rule, "usage: checkfree [{s}] <file.s>...", .{record_flag});
+        try report_line.write(errors, &.{ .source = rule }, .@"error", rule, "usage: checkfree [{s}] <file.s>...", .{record_flag});
         return exit_unusable;
     }
     var found: std.ArrayList(Pin) = .empty;
     for (paths) |path| {
         const text = Io.Dir.cwd().readFileAlloc(context.io, path, arena, .unlimited) catch |failure| {
-            try report_line.write(errors, .{ .source = path }, .@"error", rule, "cannot read: {s}", .{@errorName(failure)});
+            try report_line.write(errors, &.{ .source = path }, .@"error", rule, "cannot read: {s}", .{@errorName(failure)});
             return exit_unusable;
         };
         try count_file(arena, project, text, &found);
@@ -133,15 +133,15 @@ fn report(comptime project: Config, found: []const Pin, errors: *Io.Writer) !boo
         const pin = pinned(project.pins, each.symbol);
         if (pin != null and pin.? == each.sites) continue;
         if (pin) |sites| {
-            try report_line.write(errors, location, .@"error", rule, "{s} reaches {d} check sites; the table pins {d}", .{ each.symbol, each.sites, sites });
+            try report_line.write(errors, &location, .@"error", rule, "{s} reaches {d} check sites; the table pins {d}", .{ each.symbol, each.sites, sites });
         } else {
-            try report_line.write(errors, location, .@"error", rule, "{s} reaches {d} check sites and has no pin", .{ each.symbol, each.sites });
+            try report_line.write(errors, &location, .@"error", rule, "{s} reaches {d} check sites and has no pin", .{ each.symbol, each.sites });
         }
         differs = true;
     }
     for (project.pins) |pin| {
         if (pinned(found, pin.symbol) != null) continue;
-        try report_line.write(errors, location, .@"error", rule, "no file exports {s}", .{pin.symbol});
+        try report_line.write(errors, &location, .@"error", rule, "no file exports {s}", .{pin.symbol});
         differs = true;
     }
     return differs;

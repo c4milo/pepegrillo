@@ -12,18 +12,18 @@ const report = @import("report.zig");
 /// Reports every parsed `.zig` file once, at its first line.
 const ZigProbe = struct {
     pub const name = "zig-probe";
-    pub fn check(context: *report.Context, file: report.File) !void {
+    pub fn check(context: *report.Context, file: *const report.File) !void {
         if (file.tree == null) return;
-        try context.findings.add(name, file.path, 1, 1, "parsed", .{});
+        try context.findings.add(file.path, 1, 1, name, "parsed", .{});
     }
 };
 
 /// Reports every `.md` file once, at its first line.
 const MarkdownProbe = struct {
     pub const name = "markdown-probe";
-    pub fn check(context: *report.Context, file: report.File) !void {
+    pub fn check(context: *report.Context, file: *const report.File) !void {
         if (!paths.has_extension(file.path, ".md")) return;
-        try context.findings.add(name, file.path, 1, 1, "read", .{});
+        try context.findings.add(file.path, 1, 1, name, "read", .{});
     }
 };
 
@@ -166,11 +166,11 @@ test "--rule limits the dispatch to the named rules" {
 
     var linter = new_linter(arena);
     const file: report.File = .{ .path = "src/store/page.zig", .source = source, .tree = &tree };
-    try linter.dispatch(file);
+    try linter.dispatch(&file);
     try testing.expectEqual(1, linter.context.findings.count());
     const markdown_only = [_][]const u8{ "--rule", "markdown-probe", "src" };
     linter.enabled = (try Linter.parse_arguments(arena, &markdown_only)).enabled;
-    try linter.dispatch(file);
+    try linter.dispatch(&file);
     try testing.expectEqual(1, linter.context.findings.count());
 }
 

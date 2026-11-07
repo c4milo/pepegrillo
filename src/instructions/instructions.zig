@@ -116,11 +116,11 @@ pub fn main(init: std.process.Init, comptime project: Config) !void {
 /// Reads the command line, opens the counter, and runs. Returns the exit status.
 pub fn run(context: *const Context, comptime project: Config, given: []const []const u8) !u8 {
     const invocation = engine.parse_arguments(given, project.baseline) catch {
-        try report_line.write(context.errors, .{ .source = engine.rule }, .@"error", engine.rule, "usage: instructions [{s}] <program>", .{engine.rewrite_flag});
+        try report_line.write(context.errors, &.{ .source = engine.rule }, .@"error", engine.rule, "usage: instructions [{s}] <program>", .{engine.rewrite_flag});
         return engine.exit_unusable;
     };
     const counter = cachegrind.Cachegrind.open(context.arena, context.io, project.valgrind_program) catch |failure| {
-        try report_line.write(context.errors, .{ .source = project.baseline }, .@"error", engine.rule, "cannot count: {s} did not run ({t}); cachegrind needs valgrind, on Linux", .{ project.valgrind_program, failure });
+        try report_line.write(context.errors, &.{ .source = project.baseline }, .@"error", engine.rule, "cannot count: {s} did not run ({t}); cachegrind needs valgrind, on Linux", .{ project.valgrind_program, failure });
         return engine.exit_unusable;
     };
     return engine.run_counted(context, project, &counter, &invocation);
