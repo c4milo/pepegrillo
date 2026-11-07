@@ -102,9 +102,9 @@ pub const Context = struct {
     findings: Findings,
 
     /// Reads a whole file relative to the working directory into the arena with a trailing zero.
-    /// Returns null when the file cannot be read for any reason: a missing file is the ordinary
-    /// case, and the caller decides what a missing file means.
-    pub fn read_file(self: *Context, path: []const u8) ?[:0]u8 {
+    /// A missing file is the ordinary failure, `error.FileNotFound`, and the caller decides what a
+    /// missing file means. A file at or over `file_len_max` bytes is `error.StreamTooLong`.
+    pub fn read_file(self: *const Context, path: []const u8) Io.Dir.ReadFileAllocError![:0]u8 {
         return Io.Dir.cwd().readFileAllocOptions(
             self.io,
             path,
@@ -112,7 +112,7 @@ pub const Context = struct {
             .limited(file_len_max),
             .of(u8),
             0,
-        ) catch null;
+        );
     }
 };
 
@@ -165,4 +165,20 @@ test "add copies the path" {
     path_buffer[0] = 'z';
     try testing.expectEqualStrings("a.zig", findings.items.items[0].path);
     try testing.expectEqual(1, findings.count());
+}
+
+test "read_file returns the file with a trailing zero, and the error of a file it cannot read" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "page.zig", .data = "const a = 1;\n" });
+    const context: Context = .{ .arena = arena, .io = testing.io, .findings = .{ .arena = arena } };
+    const path = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/page.zig", .{tmp.sub_path});
+    const source = try context.read_file(path);
+    try testing.expectEqualStrings("const a = 1;\n", source);
+    try testing.expectEqual(0, source[source.len]);
+    const missing = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/gone.zig", .{tmp.sub_path});
+    try testing.expectError(error.FileNotFound, context.read_file(missing));
 }

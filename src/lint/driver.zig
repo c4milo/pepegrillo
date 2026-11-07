@@ -229,7 +229,7 @@ fn lint_file(comptime rules: anytype, linter: *Linter(rules), path: []const u8) 
     linter.files_seen += 1;
     if (linter.files_seen > files_per_run_max) return error.TooManyFiles;
     const arena = linter.context.arena;
-    const source = linter.context.read_file(path) orelse {
+    const source = linter.context.read_file(path) catch {
         return file_error(rules, linter, path, "Unreadable");
     };
     defer arena.free(source);

@@ -208,3 +208,22 @@ test "an absolute or ./ PATH under the working directory reaches the rules relat
     try testing.expectEqual(2, findings.len);
     for (findings) |finding| try testing.expectEqualStrings(expected, finding.path);
 }
+
+test "a file at the size limit is a file error, and no rule reads it" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const large = try arena.alloc(u8, report.file_len_max);
+    @memset(large, '#');
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "large.md", .data = large });
+    const path = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/large.md", .{tmp.sub_path});
+
+    var linter = new_linter(arena);
+    linter.quiet = true;
+    try linter.lint_path(path);
+    try testing.expectEqual(1, linter.files_seen);
+    try testing.expectEqual(1, linter.file_errors);
+    try testing.expectEqual(0, linter.context.findings.count());
+}
