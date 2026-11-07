@@ -97,12 +97,12 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 - `src/checkfree/` counts the safety check sites of a project's exported functions:
   `checkfree.zig` the tool, `checkfree_assembly.zig` the reader of LLVM's assembly and the count.
 - `hooks/pre-push` is the git hook a project installs.
-- `docs/` holds what the projects share in prose: `performance/`, the method, split by the file rule
-  above with `performance.md` as its entry point, and `api.md`, the guide to a public API:
-  TigerStyle first, then Zig 0.16's std idioms, then a project decision that names its reason. It
-  ships in the package, so a project's build installs the method at the commit it pins (`zig build
-  guide` in the projects). `docs/performance.md` points to the folder until every project installs
-  the folder.
+- `docs/` holds what the projects share in prose. Both guides below ship in the package.
+  - `performance/` is the method, split by the file rule above, with `performance.md` as its entry
+    point. A project's build installs it at the commit it pins (`zig build guide` in the projects).
+    `docs/performance.md` points to the folder until every project installs the folder.
+  - `api.md` is the guide to a public API: TigerStyle first, then Zig 0.16's std idioms, then a
+    project decision that names its reason. No project's build installs it yet.
 - `tools/` holds pepegrillo's own configured entry points, which run pepegrillo over itself.
 
 ## Commands

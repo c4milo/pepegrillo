@@ -57,7 +57,10 @@ pub fn page_count(size_bytes: u64, page_size_bytes: u64) u64 {
 ### 3.2 Units and qualifiers last in a name
 
 TigerStyle, "Naming Things": put the unit or the qualifier last, in descending significance. Write
-`latency_ms_max`, not `max_latency_ms`. A dependent then reads the unit at the call site.
+`latency_ms_max`, not `max_latency_ms`. The related names then line up, and `latency_ms_min` goes
+next to `latency_ms_max`.
+
+TigerStyle gives no list of suffixes. This guide uses these:
 
 - Write `_ns`, `_ms` or `_s` for a time.
 - Write `_bytes` or `_len` for a size in bytes, as the project defines it.
@@ -66,11 +69,13 @@ TigerStyle, "Naming Things": put the unit or the qualifier last, in descending s
 ### 3.3 Static allocation and storage the caller owns
 
 TigerStyle, "Safety": allocate all memory at startup, and allocate nothing after
-initialization. For an API, this gives two rules:
+initialization. For an API, no function of a type allocates after `init`. TigerStyle's own `init`
+in "Naming Things" takes an allocator, so `init` can allocate.
 
-- A type takes no `Allocator` after `init`. Most types take none at all.
-- The caller owns the storage. The type states the bytes it needs as a constant, or as a pure
-  function of its options, and the caller passes that storage in.
+This guide adds a second rule, which TigerStyle does not state: where it can, the caller owns the
+storage. The type states the bytes it needs as a constant, or as a pure function of its options.
+The caller passes that storage in, and so decides where each byte lives. A type that allocates in
+`init` instead frees that memory in `deinit` (section 4.3).
 
 ```zig
 pub fn Queue(comptime capacity: u32) type {
@@ -115,8 +120,11 @@ A default can change, and the caller does not see the change.
 
 ### 3.7 Limits as named constants
 
-TigerStyle, "Safety": put a limit on everything. A public limit is a named constant with a doc
-comment, such as `entries_max`. A dependent then sizes its own storage from the same constant.
+TigerStyle, "Safety": put a limit on everything.
+
+This guide adds the form of a public limit, which TigerStyle does not state. A public limit is a
+named constant with a doc comment, such as `entries_max`. A dependent then sizes its own storage
+from the same constant.
 
 ### 3.8 Assertions
 
@@ -133,9 +141,10 @@ value (section 4.5).
   `!u64`.
 - TigerStyle, "Naming Things": put a callback last in the parameters.
 
-## 4. Standard library idioms where TigerStyle is silent
+## 4. Standard library idioms where TigerStyle states no rule
 
-Each idiom below gives a std example, then a wrong form and a right form.
+TigerStyle states no rule for the idioms below. Section 4.3 tells where TigerStyle uses an idiom
+in an example. Each idiom gives a std example, then a wrong form and a right form.
 
 ### 4.1 A generic type is named for the thing
 
@@ -176,13 +185,22 @@ std takes options by value, and keeps no pointer to them after the call:
   `json/static.zig:73`.
 
 TigerStyle asks for `*const` when the options are over 16 bytes (section 3.5). Use both rules:
-take `*const`, and copy what the value keeps. When `init` keeps the pointer, the caller must keep
-the options alive for the life of the value, and no type states that rule.
+take `*const`, and copy what the value keeps.
+
+When `init` keeps the pointer, the caller must keep the options alive for the life of the value.
+No type states that rule, so the compiler cannot check it.
+
+The options in the examples below hold 24 bytes, so TigerStyle asks for `*const`.
 
 Wrong:
 
 ```zig
-pub const Options = struct { entries_max: u32, timeout_ms: u64, retries_max: u32 };
+pub const Options = struct {
+    entries_max: u32,
+    retries_max: u32,
+    timeout_ms: u64,
+    interval_ms: u64,
+};
 
 pub const Cache = struct {
     options: *const Options,
@@ -196,7 +214,12 @@ pub const Cache = struct {
 Right:
 
 ```zig
-pub const Options = struct { entries_max: u32, timeout_ms: u64, retries_max: u32 };
+pub const Options = struct {
+    entries_max: u32,
+    retries_max: u32,
+    timeout_ms: u64,
+    interval_ms: u64,
+};
 
 pub const Cache = struct {
     options: Options,
@@ -207,48 +230,62 @@ pub const Cache = struct {
 };
 ```
 
-std gives most fields of an options struct a default. Give a field a default only where one value
-is correct for most callers. The caller still passes each field (section 3.6).
+std gives most fields of an options struct a default. Here TigerStyle wins: the caller passes
+each field at the call site (section 3.6).
 
-The lint rule `kept_options_pointer` finds the wrong form.
+Some pointers are meant to be kept, such as a pointer to a vtable or to a function. The lint
+rule `kept_options_pointer` finds the wrong form, and its `kept_types` setting names the types a
+value may keep.
 
 ### 4.3 `init` and `deinit` are a pair
 
+TigerStyle uses `init` in its examples in "Naming Things" and "Cache Invalidation". It names
+`deinit` in "Naming Things", but it states no rule for the pair.
+
 std names the function that makes a value `init`, and the function that releases what it holds
-`deinit`: `std.heap.ArenaAllocator` at `heap/ArenaAllocator.zig:46` and `:51`. A type that holds
-nothing to release has no `deinit`, as `std.heap.FixedBufferAllocator` at
-`heap/FixedBufferAllocator.zig:11`.
+`deinit`. `std.heap.ArenaAllocator` has both, at `heap/ArenaAllocator.zig:46` and `:51`.
+
+A type that holds nothing to release has no `deinit`. `std.heap.FixedBufferAllocator`, at
+`heap/FixedBufferAllocator.zig:11`, has none.
+
+The example below allocates in `init`, as TigerStyle's own `init` does (section 3.3).
 
 Wrong:
 
 ```zig
 pub const Log = struct {
-    count: u32,
+    entries: []u64,
 
-    pub fn create(log: *Log) void {
-        log.* = .{ .count = 0 };
+    pub fn create(gpa: std.mem.Allocator, entries_max: u32) error{OutOfMemory}!Log {
+        return .{ .entries = try gpa.alloc(u64, entries_max) };
     }
 
-    pub fn destroy(log: *Log) void {
+    pub fn destroy(log: *Log, gpa: std.mem.Allocator) void {
+        gpa.free(log.entries);
         log.* = undefined;
     }
 };
+
+const std = @import("std");
 ```
 
 Right:
 
 ```zig
 pub const Log = struct {
-    count: u32,
+    entries: []u64,
 
-    pub fn init(log: *Log) void {
-        log.* = .{ .count = 0 };
+    pub fn init(gpa: std.mem.Allocator, entries_max: u32) error{OutOfMemory}!Log {
+        return .{ .entries = try gpa.alloc(u64, entries_max) };
     }
 
-    pub fn deinit(log: *Log) void {
+    pub fn deinit(log: *Log, gpa: std.mem.Allocator) void {
+        gpa.free(log.entries);
         log.* = undefined;
     }
 };
+
+const std = @import("std");
 ```
 
 ### 4.4 An iterator's `next` returns `?T`
@@ -320,7 +357,7 @@ pub fn parse_port(text: []const u8) ParsePortError!u16 {
 const std = @import("std");
 ```
 
-### 4.6 An enum or an options struct in place of a `bool` parameter
+### 4.6 An enum in place of a `bool` parameter
 
 std passes a choice as an enum: `std.mem.readInt` takes a `std.builtin.Endian` at `mem.zig:1894`,
 and `std.builtin.Endian` is at `builtin.zig:845`. The call site then names the choice. A `true` at
@@ -410,10 +447,14 @@ pub fn find_slot(keys: []const u64, key: u64) ?u32 {
 ### 4.9 `std.Io.Reader` and `std.Io.Writer` for a stream
 
 std writes to a stream through `*std.Io.Writer` and reads from one through `*std.Io.Reader`:
-`std.Io.Writer.writeAll` at `Io/Writer.zig:549`, `std.Io.Reader.takeInt` at
-`Io/Reader.zig:1169`, and `std.json.Stringify.value` at `json/Stringify.zig:573`. A type that
-reads or writes a stream takes one of these. A caller then gives it a file, a socket or a fixed
-buffer: `std.Io.Writer.fixed`, at `Io/Writer.zig:125`, writes into storage the caller owns.
+
+- `std.Io.Writer.writeAll`, at `Io/Writer.zig:549`.
+- `std.Io.Reader.takeInt`, at `Io/Reader.zig:1169`.
+- `std.json.Stringify.value`, at `json/Stringify.zig:573`.
+
+A type that reads or writes a stream takes one of these. A caller then gives it a file, a socket
+or a fixed buffer. `std.Io.Writer.fixed`, at `Io/Writer.zig:125`, writes into storage the caller
+owns.
 
 This idiom is for a stream. A type that reads one bounded message from bytes the caller already
 holds takes a slice (section 4.7).
@@ -455,8 +496,11 @@ A project can depart from TigerStyle or from std when it has a reason. Record ea
    from, by its TigerStyle section or its std file and line. Name the reason, and the
    alternatives that the decision rejected.
 2. Put a doc comment on the public declaration that departs. Cite the decision by its number.
-3. When a lint rule reports the declaration, exclude its path in the rule's `scope`. Put a comment
-   on the exclusion that cites the decision.
+3. When a lint rule reports the declaration, change the rule's configuration, and put a comment
+   on the change that cites the decision:
+   - When the rule has a setting for the case, use it, such as `kept_types` for a kept pointer.
+   - Otherwise, exclude the path in the rule's `scope`. The rule then reads nothing in that file,
+     so keep the file small.
 
 ```zig
 /// Decision 12: the type keeps a pointer to its options, because one options value serves
@@ -478,20 +522,24 @@ project turns it on in its own lint entry point.
 - `type_function_suffix` reports a `pub` function that returns `type` and whose name ends with a
   configured suffix, `Of` by default (section 4.1).
 - `kept_options_pointer` reports a `pub` function named `init`, or another configured name, that
-  stores a `*const` parameter, or the address of a field of one, in a field of its self parameter
-  or of the struct it returns (section 4.2).
+  stores a `*const` parameter, or the address of a field of one, in a field of an out parameter
+  or of the struct it returns (section 4.2). It does not report a `comptime` parameter, a pointer
+  to a function, or a pointer to a type that `kept_types` names.
 
 ```zig
 const rules = @import("pepegrillo").lint.rules;
 
 pub const type_function_suffix = rules.type_function_suffix.Rule(.{
+    .name = "type-function-suffix",
     .scope = .{ .extensions = &.{".zig"}, .include_directories = &.{"src"} },
     .suffixes = &.{"Of"},
 });
 
 pub const kept_options_pointer = rules.kept_options_pointer.Rule(.{
+    .name = "kept-options-pointer",
     .scope = .{ .extensions = &.{".zig"}, .include_directories = &.{"src"} },
     .function_names = &.{"init"},
+    .kept_types = &.{"VTable"},
 });
 ```
 
