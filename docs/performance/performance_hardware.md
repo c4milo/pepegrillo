@@ -16,6 +16,9 @@ change that the hardware runs well.
     store can change the state ([the loop's state](performance_zig.md#the-loops-state)).
 - In assembly, give each register a job, and write the plan in the header of the file. Pack what
   does not fit. Spill to the loop's struct what a phase does not need, once per phase.
+- Keep the values of a chain of operations in registers. Each result goes to the next operation
+  with no store and no load. Write the chain as one function on locals, not as calls that pass
+  structs through memory.
 
 **Branches.**
 
@@ -45,6 +48,9 @@ change that the hardware runs well.
   - Entries of the smallest integer that holds the value.
   - A pointer array, not a multiply, for the address of a table.
   - An indexed array, not a chain of pointers.
+  - The widest window or the largest table that still fits. A wider window does fewer steps, and
+    the table pays for it only while it stays in the first-level cache of the smallest core that
+    runs it.
 - Put together the fields that one loop touches, hot scalars before tables. Do not let two threads
   write one line.
 - The hardware prefetcher handles sequential streams. A reference far back into history misses, at
@@ -64,6 +70,10 @@ change that the hardware runs well.
 
 **Vectors.**
 
+- Keep every execution unit busy. On a wide core, run independent scalar work in the general
+  registers beside the vector work, in the same pass.
+- Use every lane of a register. An instruction that works on two lanes does two independent jobs
+  for the cost of one, when two jobs exist.
 - Keep a verdict in the vector registers across a group of blocks. Move it to a general register
   once per group. Each move costs, and a narrow core pays more for it.
 - The bit mask of a compare is one instruction on x86-64. On aarch64 it is several instructions,
@@ -89,6 +99,15 @@ change that the hardware runs well.
   - Start a lookup before the refill that it can overlap.
 - Only fewer dependent steps, or two chains that overlap, make a latency chain shorter. Fewer
   instructions do nothing for it.
+- Give the most frequent special case of an operation its own code. A square needs about half the
+  word products of a multiplication. A square that ran as a multiplication took 0.81 µs at 32 words
+  on an M1 Pro, where a baseline's square took 0.58 µs.
+- Do work once for each operation, not once for each round of a loop. Compute before a retry loop
+  what each round computes again from inputs the loop does not change. Price the memory that it
+  holds against the limit of the appendix.
+- Where instructions bind, write each step with the fewest instructions that the instruction set
+  gives. A rotation by a multiple of 8 is one byte shuffle. An equal form of a formula can remove
+  instructions, as complemented lanes remove most NOT instructions from Keccak's chi.
 - A shorter loop is a guess until a paired run shows the gain. One index that stepped over counted
   blocks cut a 16-byte loop from 24 instructions to 16. llvm-mca predicted 15% fewer cycles on a
   Neoverse N2. There, two paired runs measured it 2 to 9% slower over text strings.

@@ -226,6 +226,8 @@ inputs for history.
   every commit. A count is the same on a busy runner, and a time is not.
   - A change that moves a count writes the baseline again, and its commit says why.
   - The judge's times still decide what a count cannot see: a miss, a mispredict or a wait.
+- Record each published comparison again after each change that claims one of its rows. An old
+  record hides a gain and sends the next change to a gap that is already closed.
 - Never push a performance change that you did not measure. Never chain a push after a step that
   can stop before it completes.
 
