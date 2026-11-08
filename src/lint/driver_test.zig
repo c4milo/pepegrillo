@@ -227,3 +227,32 @@ test "a file at the size limit is a file error, and no rule reads it" {
     try testing.expectEqual(1, linter.file_errors);
     try testing.expectEqual(0, linter.context.findings.count());
 }
+
+/// A rule that reports nothing, under a name the caller chooses.
+fn NamedProbe(comptime rule_name: []const u8) type {
+    return struct {
+        pub const name = rule_name;
+        pub fn check(context: *report.Context, file: *const report.File) !void {
+            _ = context;
+            _ = file;
+        }
+    };
+}
+
+/// `rules_max` rules, each with a name of 32 bytes. assert_rule_set checks every byte of every
+/// name and compares each pair of names at compile time, so this set holds the largest check the
+/// driver takes. rotor's 12 rules exceeded the default branch quota.
+const FullLinter = driver.Linter(full_rules: {
+    var rules: [driver.rules_max]type = undefined;
+    for (&rules, 0..) |*rule, index| {
+        const letter = [_]u8{'a' + @as(u8, @intCast(index % 26))};
+        const second = [_]u8{'a' + @as(u8, @intCast(index / 26))};
+        rule.* = NamedProbe("unreleased-acquire-probe-name-" ++ second ++ letter);
+    }
+    break :full_rules rules;
+});
+
+test "a set of rules_max rules with long names compiles" {
+    try testing.expect(FullLinter.rule_index_of("unreleased-acquire-probe-name-aa") != null);
+    try testing.expect(FullLinter.rule_index_of("unreleased-acquire-probe-name-bf") != null);
+}

@@ -328,6 +328,12 @@ fn run_main(comptime rules: anytype, init: std.process.Init) !void {
 /// looks rules up by name and the report prints it.
 fn assert_rule_set(comptime rules: anytype) void {
     if (rules.len > rules_max) @compileError("more lint rules than rules_max");
+    // The checks below read each byte of each name once for its shape and once for each other
+    // rule, so their branches grow with the name bytes times the rule count. The default quota of
+    // 1000 stopped a set of 12 rules.
+    comptime var name_bytes: usize = 0;
+    inline for (rules) |rule| name_bytes += rule.name.len;
+    @setEvalBranchQuota(1000 + 4 * name_bytes * (rules.len + 1));
     inline for (rules, 0..) |rule, index| {
         assert_rule_name_shape(rule.name);
         inline for (rules, 0..) |other, other_index| {
