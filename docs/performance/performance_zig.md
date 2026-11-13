@@ -159,6 +159,18 @@ exception that a project ruled because of an item.
 - `@call(.always_inline, ...)` on a function that LLVM already inlined changed its branch layout. A
   change that only moves the alignment of a function forces no inlining, neither `.always_inline`
   nor `.never_inline`.
+- A caller can inline a function of another module at its own call site, and that module needs no
+  change: `@call(.always_inline, json.TextWriter.begin_object, .{writer})`.
+  - A JSON writer had one `pub fn` for each token. At the caller's sites, `.always_inline` cut the
+    instructions of an encode by 2 to 24% on x86-64. The cut depended on the message.
+  - On aarch64, a tree of 341 small objects took 57,150 instructions with each method an
+    `inline fn`. It took the same 57,150 with `.always_inline` at the caller's sites.
+  - Each site grows. The function that wrote the tree went from 488 to 1,588 bytes. The program got
+    1 KiB smaller, because the out-of-line copies went away.
+  - Inline the sites that a profile names, not every call.
+  - In the tuple of arguments, an anonymous struct or union literal does not coerce to the type of
+    the parameter. Name the type: `Token{ .name = .last }`, not `.{ .name = .last }`. A bare enum
+    literal coerces.
 - A release build merges functions with the same machine code into one symbol.
   - The sampler's count for that symbol includes every merged function. Its callers in the binary
     then show too much.
