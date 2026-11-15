@@ -222,6 +222,15 @@ test "run judges nothing when the merge fails, or its report is not kcov's or co
     try testing.expect(contains(empty.errors, base ++ "/out: error: [coverage] counted no line in any directory"));
 }
 
+test "check_config takes a project of 17 directories, past the default branch quota" {
+    const directories = &.{
+        "src/core",  "src/wire",   "src/http",   "src/tls_provider", "src/crypto",  "src/qlog",
+        "src/hpack", "src/qpack",  "src/quic",   "src/h2",           "src/h3",      "src/h11",
+        "src/tls",   "src/dnssec", "src/server", "src/client",       "src/colibri",
+    };
+    try testing.expectEqual(null, comptime coverage.check_config(.{ .directories = directories }));
+}
+
 test "check_config refuses directories that overlap, leave the working directory, or sit in output" {
     try testing.expectEqual(null, coverage.check_config(.{ .directories = &.{ "src/store", "src/storage" } }));
     try testing.expect(coverage.check_config(.{ .directories = &.{} }) != null);

@@ -73,6 +73,12 @@ const output_buffer_len: usize = 4096;
 
 /// Why a configuration cannot run, which the compile error names.
 pub fn check_config(comptime project: Config) ?[]const u8 {
+    // Each directory is compared with each earlier one, a byte at a time, so the branches grow
+    // with the directory bytes times the directory count. The default quota of 1000 stopped a
+    // project of 17 directories.
+    comptime var directory_bytes: usize = 0;
+    inline for (project.directories) |directory| directory_bytes += directory.len;
+    @setEvalBranchQuota(1000 + 4 * directory_bytes * (project.directories.len + 1));
     if (project.directories.len == 0) return "directories names no directory";
     for (0..project.directories.len) |index| {
         if (check_directory(project, index)) |reason| return reason;
