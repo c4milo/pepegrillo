@@ -64,6 +64,9 @@ A step that you skip costs days.
   - Make sure that the harness compiles to the same machine code for every candidate. One caller
     gave the shared timing loop a slice of run-time length. That slice left a bounds check in the
     loop for every row.
+  - Count the whole unit that a user runs, such as one routed call, beside its parts. A benchmark
+    of the parts does not see the framework around them. A reset in a router took 95.5% of a call,
+    and no benchmark of the library or of the router saw it.
 - The noise that an input must pass is the larger of two values: its spread, and the floor that
   the appendix sets.
   - A paired job measures the base and the change in one run.

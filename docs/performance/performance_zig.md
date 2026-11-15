@@ -145,6 +145,18 @@ exception that a project ruled because of an item.
     place, and nothing calls the new `memset`.
 - An assignment of a struct copies all of it. A copy of a whole list of fixed capacity moved 2,448
   bytes. It made a cache hit take 34.3 ns, not 7.0 ns. Copy only the part in use.
+- `s.* = .{}` writes the whole struct, its `undefined` fields too. Zig 0.16 makes the defaults one
+  constant of the struct's size, with zeros for the `undefined` bytes, and copies it with `memcpy`.
+  - When every default is zero, the assignment calls `memset` with zero over the whole struct.
+  - A nested field whose default is `.{}` is written whole in the same way.
+  - On x86_64-linux and aarch64-macos in ReleaseFast, `.{}` on a struct with a 400,000-byte
+    `undefined` array copied 400,016 bytes. `s.* = .{ .big = undefined }` made two stores.
+  - A router reset a state of 375 KB with `.{}` at each request. The copy took 95.5% of a call
+    with a 40-byte message. Without it, the call took 3,425 instructions, not 76,902.
+  - On a hot path, name each large field `undefined` in the literal: `.{ .big = undefined }`. Do
+    the same for a nested field: `.{ .inner = .{ .data = undefined } }`.
+  - In Debug and ReleaseSafe, that literal fills the field with 0xAA, as the first item says. A
+    reset that assigns only the small fields writes no buffer in any mode.
 - A function that returned an 8 MiB table by value overflowed an 8 MiB stack. Initialize a large
   value in place, through a pointer.
 
