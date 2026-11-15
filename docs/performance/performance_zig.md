@@ -299,9 +299,19 @@ exception that a project ruled because of an item.
 
 - A cross build compiles for the baseline CPU of its target, unless `-Dcpu` names a CPU.
   - `x86_64-linux` is x86-64 v1, without AVX2 or BMI2. `aarch64-linux` is a generic core.
-  - A native build uses the CPU of the host.
+  - A native build uses the CPU of the host, but not all of it on aarch64 Linux (next item).
   - A baseline that selects AVX2 or BMI2 at run time beats a v1 build for that reason only.
   - Measure at the CPU that callers build for, and name it beside the number.
+- On aarch64 Linux, a `native` build of Zig 0.16 does not get the architecture version, `sve2` or
+  the tuning features of the model.
+  - Zig reads the model from `MIDR_EL1` and starts from an empty set of features. Eleven ID
+    registers then add features. No register that it reads holds `v8a`, `v9a`,
+    `use_postra_scheduler` or `sve2`.
+  - On a Neoverse N2 runner, `native` gave 25 features. `-Dcpu=neoverse_n2` gave 64.
+  - A large ReleaseFast program did not build for `native` there. LLVM stopped with `fixup value
+    out of range`. The program built for `neoverse_n2`.
+  - `zig build-exe --show-builtin` prints the model and each feature. Print it before a benchmark
+    build, and build with `-Dcpu=` and the model that it names.
 - C compiled in a Zig build gets the optimize mode of the build, sanitizers included. In
   ReleaseSafe, the trap checks kept a C loop scalar that ReleaseFast made vector code. They doubled
   the instruction count of a C baseline. Build a baseline with its own flags: `sanitize_c = .off`
