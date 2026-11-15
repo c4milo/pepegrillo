@@ -168,6 +168,20 @@ exception that a project ruled because of an item.
   - Give the setup code a comptime value that no candidate uses.
   - Enter each candidate with `@call(.always_inline, ...)`. When other code must call a candidate
     too, use `.never_inline` for every candidate.
+- Code that joins a program changes how LLVM inlines the code that was there. LLVM gives a large
+  bonus to a local function with one call site. A second module that calls the function removes
+  that bonus.
+  - On aarch64-linux in ReleaseFast, a benchmark loop inlined an encode function and took 191
+    instructions per operation. A second module that called the function four times made the loop
+    call it. The loop then took 238. Neither the loop nor the function changed.
+  - In another program, routed calls joined the program that counted a codec. Seven codec
+    operations moved by 3.6 to 9.9%. When the calls moved to their own program, all 48 codec
+    counts came back exactly.
+  - Give each unit of work that links other modules a benchmark program of its own. A count then
+    moves only with the code of its own program. The candidates of one comparison still share one
+    program ([step 1](performance.md#1-measure-the-gap-first)).
+  - A new operation in a benchmark program writes the baseline again before the change that it
+    measures.
 - `@call(.always_inline, ...)` on a function that LLVM already inlined changed its branch layout. A
   change that only moves the alignment of a function forces no inlining, neither `.always_inline`
   nor `.never_inline`.
