@@ -4,8 +4,8 @@ pepegrillo is the developer tooling a Zig 0.16 project runs from its build to ho
 own rules. It holds a lint engine with generic rules a project configures, a cognitive-complexity
 scorer, a commit-message linter, a runner for TLA+ models under TLC, a runner for Lean proofs under
 lake, a check that holds benchmark cases to the instructions each operation takes, counted under
-cachegrind, and a check that holds exported functions to the safety check sites they reach. Home:
-github.com/c4milo/pepegrillo.
+cachegrind, a check that holds exported functions to the safety check sites they reach, and a
+count of the lines that a project's tests run, under kcov. Home: github.com/c4milo/pepegrillo.
 
 ## What pepegrillo is
 
@@ -15,7 +15,7 @@ github.com/c4milo/pepegrillo.
   that project, written against `lint.report`, `lint.ast`, `lint.paths` and `lint.harness`.
 - **It names no project that uses it.** No project name appears in code, tests, fixtures, or
   documents. Fixtures use neutral names such as `src/store/page.zig`.
-- **Developer tooling.** It reads the filesystem, runs git, TLC, lake, curl and valgrind, and
+- **Developer tooling.** It reads the filesystem, runs git, TLC, lake, curl, valgrind and kcov, and
   allocates from an arena. A project runs it from its build and never links it into what it ships.
 - **One layout for formal specifications.** TLA+ models live in `spec/tla/<model>/` and a Lean
   project in `spec/lean/`, in every project that uses the `tla` and `lean` tools.
@@ -72,7 +72,7 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 
 - A Conventional Commit: `type(scope)!: description`. The type is one of `feat`, `fix`, `docs`,
   `test`, `refactor`, `perf`, `build`, `ci`, `chore`. The scopes are `lint`, `complexity`,
-  `commit`, `tla`, `lean`, `instructions`, `checkfree`, `hooks` and `build`.
+  `commit`, `tla`, `lean`, `instructions`, `checkfree`, `coverage`, `hooks` and `build`.
 - The description is imperative, starts with a lowercase letter, has no final period, and the
   subject line stays at or under 72 columns.
 - One blank line after the subject. A body line stays at or under 100 columns, and the body stays
@@ -82,8 +82,8 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 ## Layout
 
 - `src/pepegrillo.zig` is the module a project imports: `lint`, `complexity`, `commit`, `tla`,
-  `lean`, `instructions`, `checkfree`, `report_line`, the finding line every tool prints, and
-  `Context`.
+  `lean`, `instructions`, `checkfree`, `coverage`, `report_line`, the finding line every tool
+  prints, and `Context`.
 - Each root exports names, never a file, except the namespaces `lint.report`, `lint.paths`,
   `lint.ast`, `lint.harness` and each `lint.rules.<rule>`. A test in each root lists its names
   through `src/public_names.zig`, so a name added or removed by accident fails it.
@@ -96,14 +96,16 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
   `tla_header.zig` what each one expects, `tla_tlc.zig` the jar, its pin and TLC's verdict.
 - `src/lean/` runs lake over a project's Lean proofs.
 - `src/context.zig` is `Context`, what the `run` of each tool receives. `tla`, `lean`,
-  `instructions`, `checkfree` and `commit` share one entry shape: `check_config`, `run` and
-  `main`.
+  `instructions`, `checkfree`, `coverage` and `commit` share one entry shape: `check_config`, `run`
+  and `main`.
 - `src/instructions/` counts a project's benchmark cases: `instructions.zig` the tool,
   `instructions_run.zig` the count and the check once the command line is read,
   `instructions_measure.zig` a cost from three runs and its verdict, `instructions_baseline.zig`
   the file of counts a project commits, `instructions_cachegrind.zig` the counter.
 - `src/checkfree/` counts the safety check sites of a project's exported functions:
   `checkfree.zig` the tool, `checkfree_assembly.zig` the reader of LLVM's assembly and the count.
+- `src/coverage/` counts the lines that a project's programs run: `coverage.zig` the tool,
+  `coverage_kcov.zig` the counter, `coverage_report.zig` kcov's report summed for each directory.
 - `hooks/pre-push` is the git hook a project installs.
 - `docs/` holds what the projects share in prose. Both guides below ship in the package, and
   `add_guide_step` in `build.zig` gives a project's build the `guide` step that installs both, at

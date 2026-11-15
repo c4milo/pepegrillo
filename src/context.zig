@@ -1,4 +1,5 @@
-//! What the `run` of each tool receives: `tla`, `lean`, `instructions`, `checkfree` and `commit`.
+//! What the `run` of each tool receives: `tla`, `lean`, `instructions`, `checkfree`, `coverage`
+//! and `commit`.
 //! Each tool's `main` builds one from `std.process.Init`, and a project's own entry point can
 //! build one to run a tool with other writers, as a test does.
 //!

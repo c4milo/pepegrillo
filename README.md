@@ -1,7 +1,7 @@
 # pepegrillo
 
 pepegrillo is the developer tooling a Zig 0.16 project runs from its build to hold its tree to its
-own rules. It has seven tools:
+own rules. It has eight tools:
 
 - **lint**: a driver that walks the tree and runs rules over Zig and Markdown files, and generic
   rules a project configures: `forbidden_references`, `file_length`, `magic_numbers`,
@@ -20,6 +20,8 @@ own rules. It has seven tools:
   commits.
 - **checkfree**: counts the safety check sites each exported function reaches in the assembly of a
   ReleaseSafe build, and fails a count that differs from the table the project commits.
+- **coverage**: runs a project's test binaries under kcov, and prints the share of lines that they
+  run in each directory the project names, with a total.
 
 A project states its settings in its own tool entry points. pepegrillo holds the engines and names
 no project.
@@ -81,8 +83,8 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
-Five tools, `tla`, `lean`, `instructions`, `checkfree` and `commit`, have one entry shape. A
-project that runs one from its own entry point calls `run` with a `pepegrillo.Context`:
+Six tools, `tla`, `lean`, `instructions`, `checkfree`, `coverage` and `commit`, have one entry
+shape. A project that runs one from its own entry point calls `run` with a `pepegrillo.Context`:
 
 ```zig
 pub fn check_config(comptime project: Config) ?[]const u8
@@ -281,6 +283,74 @@ checkfree-check -- --record` prints the table the files give. A finding names th
 ```text
 tools/checkfree_sites.zig: error: [checkfree] lib_crc32_avx2 reaches 6 check sites; the table pins 5
 ```
+
+## Line coverage
+
+The `coverage` tool counts the lines that a project's test binaries and other programs run. It
+runs each program under kcov, merges the runs, and prints the share of lines in each directory
+that the project names, with a total. A line that two programs run counts once.
+
+```zig
+// tools/coverage.zig
+const std = @import("std");
+const pepegrillo = @import("pepegrillo");
+
+pub fn main(init: std.process.Init) !void {
+    return pepegrillo.coverage.main(init, .{
+        .directories = &.{ "src/store", "src/wire" },
+    });
+}
+```
+
+The project's build makes each test binary in Debug with LLVM, and passes it to the tool:
+
+```zig
+const coverage = b.addExecutable(.{
+    .name = "coverage",
+    .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/coverage.zig"),
+        .target = b.graph.host,
+        .imports = &.{.{ .name = "pepegrillo", .module = module }},
+    }),
+});
+const store_tests = b.addTest(.{
+    .root_module = b.createModule(.{
+        .root_source_file = b.path("src/store/store.zig"),
+        .target = target,
+        .optimize = .Debug,
+    }),
+    .use_llvm = true,
+});
+const check = b.addRunArtifact(coverage);
+check.addArtifactArg(store_tests);
+check.setCwd(b.path("."));
+b.step("coverage", "Count the lines that the tests run").dependOn(&check.step);
+```
+
+kcov reads the line table that the compiler writes. Zig's own x86-64 backend writes an incomplete
+table, so set `use_llvm = true`. Zig compiles only the functions that code references, so a
+function that no test references has no line to count and does not lower the share. A test that
+calls `std.testing.refAllDecls` on a file makes the functions of that file count.
+
+The tool prints one line for each directory, and the total at its output directory:
+
+```text
+src/store: note: [coverage] 91.6% of 1204 lines
+src/wire: note: [coverage] 84.1% of 1816 lines
+zig-out/coverage: note: [coverage] total 87.1% of 3020 lines
+```
+
+A share rounds down to a tenth of a percent, so a share under 100% never prints as 100.0%. kcov's
+HTML report is at `zig-out/coverage/merged/index.html`. The tool deletes `zig-out/coverage` before
+each run, because kcov adds a new run to the lines that an earlier run left there. When a program
+fails, the tool prints the report, then the end of the program's output, and exits 1.
+
+The tool pins the major release of kcov, 43 by default, in `kcov_release`. Another release can
+count other lines. kcov runs on Linux:
+
+- Ubuntu 26.04 has kcov 43: `apt-get install kcov`.
+- Ubuntu 24.04 has no kcov package. Build kcov 43 from its source, or run the tool in a container.
+- In a container, kcov needs ptrace: `--cap-add=SYS_PTRACE --security-opt seccomp=unconfined`.
 
 ## Guides
 

@@ -161,7 +161,7 @@ fn totals_of(counter: anytype, program: []const u8, arguments: []const []const u
 }
 
 /// The last `failure_tail_lines` lines of a failed run's standard error.
-fn write_tail(errors: *Io.Writer, output: []const u8) !void {
+pub fn write_tail(errors: *Io.Writer, output: []const u8) !void {
     var start_index = output.len;
     var lines: usize = 0;
     while (start_index > 0 and lines <= failure_tail_lines) : (start_index -= 1) {
