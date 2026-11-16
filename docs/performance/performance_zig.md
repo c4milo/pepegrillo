@@ -46,6 +46,18 @@ exception that a project ruled because of an item.
   - A `u7` field of a struct behind a pointer went through the stack in each iteration. Each time
     cost about 25 cycles.
   - A `u9` counter and a `u6` value kept from one iteration to the next also went through memory.
+- Zig stores a field narrower than a byte at its own width, and loads it as a byte. A `bool`, a
+  `u2` and an enum of two to four values are such fields. LLVM forwards no such store to a load.
+  - A decoder's `inline fn init` stored three options that its decode then read. The caller's
+    options were known at compile time.
+  - With every option at zero, LLVM merged the stores into one fill of zeros, which it forwards.
+    The options became constants.
+  - With one option at 1, each decode loaded the three options from memory and tested them. It
+    took 950 instructions against 934, on aarch64 in ReleaseFast.
+  - Give each such field a byte: `enum(u8)` for an enum, and a two-value `enum(u8)` for a `bool`.
+    The decode then took 933. Hold the width with `comptime assert(@bitSizeOf(T) == 8)`.
+  - The optimized IR shows the pattern: `store i2 0, ptr %f`, then `load i8, ptr %f` and a
+    `trunc` to `i2`. `-femit-llvm-ir` writes that IR.
 - An array indexed at run time kept its whole struct in memory. When such an array became part of
   the loop's state, the other fields of the loop spilled too. Keep such arrays in a separate struct
   beside the state of the loop.
