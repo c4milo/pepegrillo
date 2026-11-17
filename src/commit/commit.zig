@@ -305,7 +305,7 @@ test "lint_commits and lint_message_text parse with the configured trailer keys"
         project.trailer_keys = &.{"Change-Id"};
         break :blk project;
     };
-    const text = "feat: add x\n\none\n\ntwo\n\nthree\n\nChange-Id: I0123\n";
+    const text = "feat: add x\n\none\n\ntwo\n\nthree\n\nfour\n\nChange-Id: I0123\n";
     var results: Findings = .{ .arena = arena, .findings_max = test_config.findings_max };
     try lint_message_text(arena, change_ids, &results, "COMMIT_EDITMSG", text);
     const log = try std.fmt.allocPrint(arena, "aaa\x00ppp\x00{s}\x00\n", .{text});

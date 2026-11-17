@@ -118,10 +118,10 @@ test "trailer_keys decides which final paragraph the body rules leave out" {
         config.trailer_keys = &.{"Change-Id"};
         break :blk config;
     };
-    const text = "feat: add x\n\none\n\ntwo\n\nthree\n\nChange-Id: I0123\n";
+    const text = "feat: add x\n\none\n\ntwo\n\nthree\n\nfour\n\nChange-Id: I0123\n";
     try expect_findings_with(config, text, &.{});
     try expect_findings_with(letters, text, &.{
-        "error: body-size: the body has 4 paragraphs, over the limit of 3",
+        "error: body-size: the body has 5 paragraphs, over the limit of 4",
     });
 }
 

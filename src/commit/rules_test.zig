@@ -118,8 +118,8 @@ const rule_cases = [_]RuleCase{
     },
     .{
         .rule = rules.body_size_rule,
-        .passing = "feat(h2): add x\n\nwhy one.\n\nwhy two.\n\nwhy three.\n",
-        .failing = "feat(h2): add x\n\nwhy one.\n\nwhy two.\n\nwhy three.\n\nwhy four.\n",
+        .passing = "feat(h2): add x\n\nwhy one.\n\nwhy two.\n\nwhy three.\n\nwhy four.\n",
+        .failing = "feat(h2): add x\n\nwhy one.\n\nwhy two.\n\nwhy three.\n\nwhy four.\n\nwhy five.\n",
     },
     .{
         .rule = rules.whitespace_rule,
@@ -340,33 +340,33 @@ fn body_of_words(arena: Allocator, count: usize) ![]const u8 {
     return out.items;
 }
 
-test "rule 7 takes a 100-word body and refuses a 101-word one" {
+test "rule 7 takes a 150-word body and refuses a 151-word one" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    try expect_findings(try body_of_words(arena, 100), &.{});
-    try expect_findings(try body_of_words(arena, 101), &.{
-        "error: body-size: the body has 101 words, over the limit of 100",
+    try expect_findings(try body_of_words(arena, 150), &.{});
+    try expect_findings(try body_of_words(arena, 151), &.{
+        "error: body-size: the body has 151 words, over the limit of 150",
     });
 }
 
-test "rule 7 takes three paragraphs and refuses four" {
-    try expect_findings("feat: add x\n\none\n\ntwo\n\nthree\n", &.{});
-    try expect_findings("feat: add x\n\none\n\ntwo\n\nthree\n\nfour\n", &.{
-        "error: body-size: the body has 4 paragraphs, over the limit of 3",
+test "rule 7 takes four paragraphs and refuses five" {
+    try expect_findings("feat: add x\n\none\n\ntwo\n\nthree\n\nfour\n", &.{});
+    try expect_findings("feat: add x\n\none\n\ntwo\n\nthree\n\nfour\n\nfive\n", &.{
+        "error: body-size: the body has 5 paragraphs, over the limit of 4",
     });
 }
 
 test "the trailer block counts against neither body limit" {
-    // A trailer line over the column limit and a fourth Key: value paragraph, both silent.
-    try expect_findings("feat: add x\n\nwhy one.\n\nwhy two.\n\nwhy three.\n\n" ++
+    // A trailer line over the column limit and a fifth Key: value paragraph, both silent.
+    try expect_findings("feat: add x\n\nwhy one.\n\nwhy two.\n\nwhy three.\n\nwhy four.\n\n" ++
         "Co-Authored-By: " ++ ("w" ** 101) ++ "\nRefs: https://example.com/issues/1\n", &.{});
     // The same shape with a key outside the closed set is body, and is counted.
-    const note = "feat: add x\n\nwhy one.\n\nwhy two.\n\nwhy three.\n\n" ++
+    const note = "feat: add x\n\nwhy one.\n\nwhy two.\n\nwhy three.\n\nwhy four.\n\n" ++
         "Note: " ++ ("w" ** 101) ++ "\n";
     try expect_findings(note, &.{
-        "error: body-line-length: line 9 is 107 columns, over the 100-column limit",
-        "error: body-size: the body has 4 paragraphs, over the limit of 3",
+        "error: body-line-length: line 11 is 107 columns, over the 100-column limit",
+        "error: body-size: the body has 5 paragraphs, over the limit of 4",
     });
 }
 
@@ -374,10 +374,10 @@ test "rule 7 counts the words of a final Note: paragraph" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const at_limit = try body_of_words(arena, 100);
+    const at_limit = try body_of_words(arena, 150);
     const text = try std.fmt.allocPrint(arena, "{s}\nNote: why\n", .{at_limit});
     try expect_findings(text, &.{
-        "error: body-size: the body has 102 words, over the limit of 100",
+        "error: body-size: the body has 152 words, over the limit of 150",
     });
 }
 

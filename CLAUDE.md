@@ -76,7 +76,7 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 - The description is imperative, starts with a lowercase letter, has no final period, and the
   subject line stays at or under 72 columns.
 - One blank line after the subject. A body line stays at or under 100 columns, and the body stays
-  at or under 3 paragraphs and 100 words. The body says why.
+  at or under 4 paragraphs and 150 words. The body says why.
 - Stage by explicit path. `zig build test` passes before every commit.
 
 ## Layout

@@ -31,10 +31,10 @@ pub const subject_columns_max_default: usize = 72;
 pub const body_columns_max_default: usize = 100;
 
 /// The most paragraphs a body may hold.
-pub const body_paragraphs_max_default: usize = 3;
+pub const body_paragraphs_max_default: usize = 4;
 
 /// The most words a body may hold.
-pub const body_words_max_default: usize = 100;
+pub const body_words_max_default: usize = 150;
 
 /// The most blank lines a message may end with.
 pub const trailing_blank_lines_max_default: usize = 1;
