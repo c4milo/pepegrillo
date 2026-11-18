@@ -72,6 +72,16 @@ change that the hardware runs well.
 
 - Keep every execution unit busy. On a wide core, run independent scalar work in the general
   registers beside the vector work, in the same pass.
+- Two vector kernels in one pass gain little when both need the vector ports. A pass of 512-bit
+  ChaCha20 with IFMA Poly1305 among its rounds took 5 to 10% fewer cycles under gcc than the two
+  kernels alone, on five x86-64 models.
+- A compiler can undo the order that the source gives. clang schedules before it allocates
+  registers, and its generic model put 36 IFMA products in one block wherever the source put them.
+  gcc schedules after, and spread them among the rotations.
+  - Read the order in each compiler's output, not in the source.
+  - In clang, the tune of a target attribute names the model that its scheduler reads.
+  - An order that one compiler needs can cost the other. Under gcc, every interleaved form kept
+    more values live, and it took 0 to 6% longer.
 - Use every lane of a register. An instruction that works on two lanes does two independent jobs
   for the cost of one, when two jobs exist.
 - Keep a verdict in the vector registers across a group of blocks. Move it to a general register
@@ -119,3 +129,12 @@ change that the hardware runs well.
   knows only the cores that LLVM models.
 - Hardware counters give cycles, instructions and mispredicts per unit, beside the counts of the
   baseline.
+- A time hides the core clock, and some instructions lower it. On a Xeon 8370C, IFMA products
+  lowered the clock from 3.38 to about 2.8 GHz. A seal with 8% fewer cycles than the baseline's
+  took 8% more time.
+  - Time a chain of dependent adds after the work. One add a cycle gives the clock, with no
+    counters.
+  - Compare cycles and time. The cycles show the code's share of a gap, and the clock shows the
+    rest.
+- llvm-mca's model of one core can rank two forms correctly, and its model of another core can
+  rank them in reverse. Trust a model only on the cores where it matched a paired run.
