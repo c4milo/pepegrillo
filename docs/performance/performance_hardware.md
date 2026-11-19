@@ -14,6 +14,17 @@ change that the hardware runs well.
   - A load or a store through the stack pointer inside the loop is a spill.
   - A load or a store through the pointer to the state is a reload. The compiler kept it because a
     store can change the state ([the loop's state](performance_zig.md#the-loops-state)).
+  - Find what is on the dependency chain before you remove a store. A loop kept 11 stores of its
+    state on each pass, and they cost nothing that a run could measure. A copy between registers on
+    the chain cost 8%.
+  - A copy between registers at each pass can be for the code after the loop. One loop moved its
+    two carries for that code, and took 25 instructions where it took 23.
+- An instruction that overwrites its first operand needs a copy of that operand when another
+  instruction reads the operand later. Write the other reader first. The overwrite is then the last
+  read and needs no copy.
+  - In a round of SHA-512, the result of SHA512H went to SHA512H2 and to an add. With SHA512H2
+    first, gcc 15 copied the result on the chain, 8 times in 16 rounds. SHA-384 took 8% longer.
+  - With the add first, gcc 15 ran at the speed of gcc 13.
 - In assembly, give each register a job, and write the plan in the header of the file. Pack what
   does not fit. Spill to the loop's struct what a phase does not need, once per phase.
 - Keep the values of a chain of operations in registers. Each result goes to the next operation
@@ -82,6 +93,11 @@ change that the hardware runs well.
   - In clang, the tune of a target attribute names the model that its scheduler reads.
   - An order that one compiler needs can cost the other. Under gcc, every interleaved form kept
     more values live, and it took 0 to 6% longer.
+- SVE2 can gain at 128-bit vectors. On a Neoverse N2, XAR does an exclusive or and a rotation in
+  one instruction. ChaCha20 with XAR ran in 0.54 to 0.61 of the time of NEON alone.
+  - `svset_neonq` and `svget_neonq` move no data. With them, the NEON code stays, and XAR replaces
+    only the rotation.
+  - The code is correct at each vector length. QEMU ran it at 16 to 256 bytes.
 - Use every lane of a register. An instruction that works on two lanes does two independent jobs
   for the cost of one, when two jobs exist.
 - Keep a verdict in the vector registers across a group of blocks. Move it to a general register
@@ -94,6 +110,9 @@ change that the hardware runs well.
 - A wider vector can lose. One instruction can cost five times as much on the cores of one vendor
   as on the cores of another that report the same features.
   - Choose a width and an instruction per CPU, from measurements on that CPU.
+  - A feature bit says that the CPU has an instruction, not that it is fast. On a Neoverse N2,
+    Keccak on the SHA-3 instructions took 1.8 times as long as the portable code. On an M1 Pro, it
+    was 1.58 times faster.
   - A pass that stops at the first byte of interest scans the block again at each stop. It lost 37%
     at 64 bytes. A validator does not stop, and it gained 1.4 times from 32 lanes to 64.
   - On an M1 Pro, a scan of one word at a time made 18-digit runs 14% faster and one-digit runs 41%
@@ -118,6 +137,17 @@ change that the hardware runs well.
 - Where instructions bind, write each step with the fewest instructions that the instruction set
   gives. A rotation by a multiple of 8 is one byte shuffle. An equal form of a formula can remove
   instructions, as complemented lanes remove most NOT instructions from Keccak's chi.
+- The best form of a step differs by compiler, and by version of one compiler. Keep a form for
+  each compiler where the measurements differ.
+  - gcc 14 and 15 for arm64 build a mask from a value of 0 or 1 in four instructions: `sbfiz`,
+    `asr` and `sxtb`. gcc 13 used one `sbfx`. That cost 2.5% of a P-256 key generation.
+  - The fix moves the bit to the top of its own word and spreads it with one arithmetic shift:
+    `(int64_t)(x << 62) >> 63`. No value of 0 or 1 comes between.
+  - Do not use `0 - bit` with gcc. gcc rewrites `x & -bit` as a multiply by the bit.
+  - Keccak's chi in its AND-NOT form ran 24% faster under gcc than the plain form. Under clang,
+    the plain form was faster.
+  - Montgomery products in blocks of four words gained under clang and lost under gcc on a
+    Neoverse N2.
 - A shorter loop is a guess until a paired run shows the gain. One index that stepped over counted
   blocks cut a 16-byte loop from 24 instructions to 16. llvm-mca predicted 15% fewer cycles on a
   Neoverse N2. There, two paired runs measured it 2 to 9% slower over text strings.

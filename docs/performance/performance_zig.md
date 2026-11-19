@@ -58,6 +58,13 @@ exception that a project ruled because of an item.
     The decode then took 933. Hold the width with `comptime assert(@bitSizeOf(T) == 8)`.
   - The optimized IR shows the pattern: `store i2 0, ptr %f`, then `load i8, ptr %f` and a
     `trunc` to `i2`. `-femit-llvm-ir` writes that IR.
+- The `u1` of `@addWithOverflow` and `@subWithOverflow` goes through the stack, in ReleaseFast
+  too. Carry it in a `u128` sum or difference.
+  - A difference over 4 words, then an add masked by its borrow, took 119 instructions on aarch64.
+    27 of them stored or loaded a byte on the stack. The `u128` form took 53, with no stack use.
+  - On x86-64, the two forms took 98 and 65 instructions.
+  - LLVM builds a mask from a bit in one instruction: `sbfx`, `csetm`, `ngc`, or `sbb` on x86-64.
+    The four-instruction mask of gcc 14 and 15 does not occur.
 - An array indexed at run time kept its whole struct in memory. When such an array became part of
   the loop's state, the other fields of the loop spilled too. Keep such arrays in a separate struct
   beside the state of the loop.

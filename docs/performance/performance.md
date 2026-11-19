@@ -46,6 +46,14 @@ A step that you skip costs days.
     [#88](https://abseil.io/fast/88)).
   - Five runs resolve a difference of a few percent. A smaller difference needs more runs or more
     jobs.
+- The version of the compiler is part of the machine. With no source change, gcc 15 made SHA-384
+  7.9% slower than gcc 13, and P-256 signatures 2.2 to 2.5% slower. clang did not move.
+  - Install the versions side by side in one image. Ubuntu 26.04 for arm64 has gcc 13, 14 and 15.
+  - Build each version's program statically, and time all of them in turn on one runner. Two
+    runners of one model agreed within 0.3%.
+- A judge checks its CPU before it runs. Read the implementer and the part from `/proc/cpuinfo`, and
+  stop on any other model. GitHub's `ubuntu-24.04-arm` and `ubuntu-26.04-arm` runners are Neoverse
+  N2 cores, with 128-bit SVE2.
 - The harness runs the code as its callers do:
   - Run unmeasured rounds first. Then the first candidate does not pay for the warm-up of the
     process. The warm-up is page faults, cold caches, cold branch predictors and a rising clock
@@ -123,6 +131,15 @@ A step that you skip costs days.
   time is not. A tracer that stops the process at every call changes the batches that it counts.
 - Compare a baseline part by part. Sample its binary by function name. Never read its source. The
   baseline is an oracle and a number, not a design.
+  - Sweep the feature mask of the baseline to find what gives it its lead. With its SVE and SVE2
+    bits clear, OpenSSL's ChaCha20 lost 32%. So its lead came from SVE2's XAR.
+  - Read what the timed loop of the baseline uses again. `openssl speed` encapsulated ML-KEM-768
+    to one key object in 17.5 µs. A TLS server encapsulates to a key made from bytes, and that took
+    32.5 µs.
+- To find what a new compiler version changed, count the instructions of each function by mnemonic
+  in each build, and compare the counts. The function whose moves, stores or sign extensions
+  changed is the one to read.
+  - Put each candidate fix under its own define, and build and time all of them in one run.
 - Where the judge gives access to the counters, first split its issue slots in the top-down
   method:
   - Slots that the front end left empty.
@@ -210,6 +227,11 @@ Run every check once with nothing broken before you count. A check that fails an
 mutation look caught. Put a limit on every wait that a failed test can get to, so that a mutation
 fails in seconds. Zig adds its own traps to the count: see
 [tests and mutations](performance_zig.md#tests-and-mutations).
+
+Run the tests under each compiler version that builds the project, not only under each compiler.
+An empty `asm` statement that held a value in a register removed the spills of a loop under gcc 15.
+Under gcc 14, the same statement left a keystream word in the stack below the call. A test that
+reads the stack after the call caught it.
 
 Check the inputs that do not use the hot path that the change touched. These include the inputs
 made of the unit that the loop handles least, the smallest inputs for a header, and the largest
