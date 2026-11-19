@@ -15,6 +15,7 @@ pub const global_state = @import("global_state.zig");
 pub const undefined_fill = @import("undefined_fill.zig");
 pub const type_function_suffix = @import("type_function_suffix.zig");
 pub const kept_options_pointer = @import("kept_options_pointer.zig");
+pub const slow_std = @import("slow_std.zig");
 
 test {
     _ = forbidden_references;
@@ -31,4 +32,5 @@ test {
     _ = undefined_fill;
     _ = type_function_suffix;
     _ = kept_options_pointer;
+    _ = slow_std;
 }

@@ -100,6 +100,17 @@ exception that a project ruled because of an item.
   - On a hot path, clear memory with vector stores in a loop that gives its pointer to
     `std.mem.doNotOptimizeAway`. That call keeps the stores.
   - The `memcpy` of compiler_rt moves one vector at a time.
+- `std.mem.copyForwards` and `std.mem.copyBackwards` copy one byte at a time. Zig 0.16 marks both
+  as deprecated, and names `@memmove` as the replacement.
+  - Each is a loop over the elements, and LLVM keeps the loop, because the slices can overlap.
+  - On aarch64, the loop over `u8` takes 4 instructions a byte. On x86-64, LLVM unrolls it 4 times,
+    but each load and store still moves one byte.
+  - `@memmove` calls `memmove`. In Zig 0.16, the `memmove` of compiler_rt moves one vector at a
+    time, except in ReleaseSmall.
+  - In another project, the body of a 192 KB call moved over itself with `copyForwards` after each
+    piece. The call rate went from 831 to 2,076 a second with `@memmove` and a check that skips a
+    copy of zero bytes.
+  - The `slow_std` lint rule reports both names.
 - The master branch of Zig writes `memset` with vector stores. Zig 0.16.0 does not. Until a release
   has it, a program exports its own `memset`. The linker then uses it in place of the copy in
   compiler_rt. On an M1 Pro with arm64 Linux and glibc linked:
