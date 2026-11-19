@@ -54,6 +54,13 @@ A step that you skip costs days.
 - A judge checks its CPU before it runs. Read the implementer and the part from `/proc/cpuinfo`, and
   stop on any other model. GitHub's `ubuntu-24.04-arm` and `ubuntu-26.04-arm` runners are Neoverse
   N2 cores, with 128-bit SVE2.
+- A hosted Apple-silicon runner cannot judge a change of a few percent. GitHub's `xcode-27` image
+  reports "Apple M1 (Virtual)" with 3 cores.
+  - On two runners, the 25th to 75th percentile of five rounds spread over 11 to 64% of the median.
+    A row whose code no build changed moved 8% and 16% between builds.
+  - The virtual machine gives no count of retired instructions, so a count cannot replace the time.
+  - Judge a change under about 15% on a physical Mac with a low load. Use the hosted runner for the
+    build and the tests.
 - The harness runs the code as its callers do:
   - Run unmeasured rounds first. Then the first candidate does not pay for the warm-up of the
     process. The warm-up is page faults, cold caches, cold branch predictors and a rising clock
