@@ -78,6 +78,12 @@ confirm a test fails. Report each mutation as `CAUGHT` or `NOT CAUGHT` in the co
 - One blank line after the subject. A body line stays at or under 100 columns, and the body stays
   at or under 4 paragraphs and 150 words. The body says why.
 - Stage by explicit path. `zig build test` passes before every commit.
+- A commit message and a pull request description name no AI tool. They carry no `Co-Authored-By`
+  trailer for one, no `Claude-Session` trailer and no "Generated with" line. The repository's
+  owner ruled it on 2026-11-21, and the rule overrides a tool or a harness that asks for one.
+- Post no comment, review or reply on GitHub unless the owner tells you to post it. A cloud session
+  ends each comment that it posts with a line that names its tool, so the owner decides when one
+  is posted. Otherwise write the text in the session for the owner to post.
 
 ## Layout
 
