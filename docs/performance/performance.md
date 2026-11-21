@@ -8,6 +8,8 @@ baselines, costs and pitfalls. This folder is the part that all projects share.
 - This file holds the six steps of the method.
 - [performance_hardware.md](performance_hardware.md) holds the rules of step 4 for the hardware.
 - [performance_zig.md](performance_zig.md) holds what Zig 0.16 does to hot code.
+- [performance_zig_comptime.md](performance_zig_comptime.md) holds what Zig 0.16 does to code that
+  the compiler runs.
 
 The discipline comes from Abseil. Here it applies to trees that allocate nothing on their hot paths.
 A path can compute over memory or wait on I/O. Abseil's articles are in

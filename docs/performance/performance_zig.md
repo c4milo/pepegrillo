@@ -5,6 +5,9 @@ from a measurement or a disassembly on Zig 0.16.0 with its LLVM backend. An item
 different backend is the exception. At each Zig upgrade, check every item again. Also check every
 exception that a project ruled because of an item.
 
+[performance_zig_comptime.md](performance_zig_comptime.md) holds the items about comptime code,
+which the compiler runs.
+
 ## Safety checks
 
 - ReleaseSafe keeps three checks: slice and array bounds, integer overflow, and `unreachable`.
